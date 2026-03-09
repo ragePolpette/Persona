@@ -100,7 +100,7 @@ def test_anonymize_and_restore_docx_end_to_end(tmp_path: Path, monkeypatch: pyte
     )
 
     censored = Document(anonymize_result.output_file)
-    assert "[[P1|" in censored.paragraphs[0].text
+    assert "[[P2|" in censored.paragraphs[0].text
     assert Path(anonymize_result.map_file).exists()
     assert json.loads(report_path.read_text(encoding="utf-8"))["approved_matches"] == 2
 

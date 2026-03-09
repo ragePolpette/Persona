@@ -100,10 +100,10 @@ def test_docx_adapter_handles_split_runs(tmp_path: Path) -> None:
     entry = _make_entry(segment.segment_id, segment.location, "Mario Rossi", placeholder, segment.text)
 
     adapter.apply_replacements(input_path, output_path, {segment.segment_id: [replacement]})
-    restored_count, warnings = adapter.restore_file(output_path, restored_path, [entry])
+    stats = adapter.restore_file(output_path, restored_path, [entry])
 
-    assert restored_count == 1
-    assert not warnings
+    assert stats.restored_count == 1
+    assert not stats.warnings
     restored = Document(restored_path)
     assert restored.paragraphs[0].text == "Mario Rossi"
 
@@ -150,10 +150,10 @@ def test_pdf_adapter_best_effort_round_trip(tmp_path: Path) -> None:
     entry = _make_entry(segment.segment_id, segment.location, "Mario Rossi", placeholder, segment.text)
 
     adapter.apply_replacements(input_path, output_path, {segment.segment_id: [replacement]})
-    restored_count, warnings = adapter.restore_file(output_path, restored_path, [entry])
+    stats = adapter.restore_file(output_path, restored_path, [entry])
 
-    assert restored_count == 1
-    assert not warnings
+    assert stats.restored_count == 1
+    assert not stats.warnings
     with pdfplumber.open(str(restored_path)) as pdf:
         assert "Mario Rossi" in (pdf.pages[0].extract_text() or "")
 

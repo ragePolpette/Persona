@@ -86,5 +86,45 @@ class AnonymizationResult:
 class RestoreResult:
     output_file: str
     restored_count: int
+    untouched_invalid_count: int
+    missing_expected_count: int
+    issues: list["RestoreIssue"]
     warnings: list[str]
 
+    @property
+    def has_integrity_issues(self) -> bool:
+        return self.untouched_invalid_count > 0 or self.missing_expected_count > 0
+
+
+@dataclass(slots=True)
+class RestoreIssue:
+    code: str
+    message: str
+    location: str = ""
+    segment_id: str = ""
+    token_id: str = ""
+    placeholder: str = ""
+
+
+@dataclass(slots=True)
+class RestoreStats:
+    restored_count: int = 0
+    untouched_invalid_count: int = 0
+    missing_expected_count: int = 0
+    issues: list[RestoreIssue] = field(default_factory=list)
+
+    @property
+    def warnings(self) -> list[str]:
+        return [issue.message for issue in self.issues]
+
+    def extend(self, other: "RestoreStats") -> None:
+        self.restored_count += other.restored_count
+        self.untouched_invalid_count += other.untouched_invalid_count
+        self.missing_expected_count += other.missing_expected_count
+        self.issues.extend(other.issues)
+
+
+@dataclass(slots=True)
+class TextRestoreOutcome:
+    text: str
+    stats: RestoreStats

@@ -17,7 +17,7 @@ There is no database, no background worker, no remote service, and no distribute
 - canonicalization rules
 - deterministic keyed token generation
 - deterministic masked payload generation
-- placeholder creation and validation
+- placeholder creation, integrity tagging, and validation
 - text replacement logic
 - detection orchestration
 - anonymize and restore pipeline functions
@@ -30,6 +30,7 @@ There is no database, no background worker, no remote service, and no distribute
 - persistent local keystore handling
 - AES-256-GCM map encryption and decryption
 - map format versioning
+- exception normalization for malformed keystore/map inputs
 
 ## Adapter responsibilities
 
@@ -69,16 +70,18 @@ Each adapter owns:
 5. Generate deterministic masked payloads.
 6. Build placeholders.
 7. Run interactive review unless `--no-review` is used.
-8. Write censored copy through the adapter.
-9. Encrypt the local map file.
+8. Build a replacement plan and encrypted map entries.
+9. Write censored copy through the adapter.
+10. Encrypt the local map file.
 
 ### Restore
 
 1. Decrypt the map with the user password.
-2. Re-open the censored file with the proper adapter.
-3. Validate placeholders strictly.
-4. Restore only exact, intact placeholders.
-5. Leave altered placeholders untouched and report warnings.
+2. Load the existing local root key with the same password.
+3. Re-open the censored file with the proper adapter.
+4. Validate placeholders strictly.
+5. Restore only expected intact placeholders.
+6. Leave altered, malformed, duplicate, or unexpected placeholders untouched and report structured issues.
 
 ## Design choices
 
@@ -86,3 +89,4 @@ Each adapter owns:
 - Prefer explicit errors over silent fallback.
 - Prefer small, testable helpers over deep abstraction layers.
 - Keep format-specific logic in adapters rather than leaking it into the core.
+- Keep restore strict and report partial failures explicitly instead of auto-healing them.

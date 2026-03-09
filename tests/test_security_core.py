@@ -11,6 +11,7 @@ from persona.core.placeholders import (
     PLACEHOLDER_PREFIX,
     PLACEHOLDER_SUFFIX,
     build_placeholder,
+    compute_placeholder_integrity_tag,
     parse_placeholder,
 )
 from persona.core.text_ops import strict_restore_text
@@ -77,9 +78,13 @@ def test_map_encryption_round_trip(tmp_path: Path) -> None:
 
 
 def test_placeholder_validation_round_trip() -> None:
-    placeholder = build_placeholder("ABCDEF123456", "Alice Example")
+    placeholder = build_placeholder(
+        "ABCDEF123456",
+        "Alice Example",
+        integrity_tag=compute_placeholder_integrity_tag(TEST_KEY, "ABCDEF123456", "Alice Example"),
+    )
     parsed = parse_placeholder(placeholder)
-    assert placeholder.startswith(PLACEHOLDER_PREFIX)
+    assert placeholder.startswith("[[P2|")
     assert placeholder.endswith(PLACEHOLDER_SUFFIX)
     assert parsed.token_id == "ABCDEF123456"
     assert parsed.masked_value == "Alice Example"
@@ -102,12 +107,12 @@ def test_strict_restore_skips_altered_placeholder() -> None:
         "altered [[P1|ABCDEF123456|Tampered Value]]"
     )
 
-    restored, warnings, restored_count = strict_restore_text(text, [entry])
+    outcome = strict_restore_text(text, [entry])
 
-    assert "Approved Mario Rossi" in restored
-    assert "[[P1|ABCDEF123456|Tampered Value]]" in restored
-    assert restored_count == 1
-    assert warnings
+    assert "Approved Mario Rossi" in outcome.text
+    assert "[[P1|ABCDEF123456|Tampered Value]]" in outcome.text
+    assert outcome.stats.restored_count == 1
+    assert outcome.stats.warnings
 
 
 def test_keystore_root_key_persists(tmp_path: Path) -> None:

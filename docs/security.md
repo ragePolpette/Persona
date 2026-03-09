@@ -51,6 +51,23 @@ The visible masked payload is also deterministic and keyed. It aims to preserve:
 
 The masked payload is not intended to be cryptographically reversible on its own. Reversal depends on the encrypted local map.
 
+## Placeholder integrity marker
+
+Current anonymization output uses a `P2` placeholder format with a short integrity marker:
+
+```text
+[[P2|TOKEN_ID|TAG|MASKED_VALUE]]
+```
+
+`TAG` is derived locally from the persistent root key, token id, and masked value. During restore, Persona checks that the placeholder:
+
+- is well formed
+- belongs to an expected token
+- matches the encrypted map entry
+- carries the expected integrity marker for current-format placeholders
+
+Legacy `P1` placeholders are still accepted for restore.
+
 ## Encrypted map
 
 The encrypted map contains at least:
@@ -75,9 +92,20 @@ Restore is strict by default.
 - exact intact placeholders are restored
 - altered placeholders are not restored
 - altered placeholders are left in place
-- warnings are emitted in the restore report
+- malformed, duplicate, and unexpected placeholders are left in place
+- structured issues and counts are emitted in the restore report
 
 This avoids restoring text into placeholders that no longer match the encrypted map.
+
+## Failure normalization
+
+Keystore and map failures are normalized into domain errors for:
+
+- wrong password
+- malformed JSON
+- malformed encryption envelope
+- AES-GCM authentication failure
+- malformed decrypted payload
 
 ## Non-goals in v1
 

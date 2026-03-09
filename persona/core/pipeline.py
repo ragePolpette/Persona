@@ -2,18 +2,39 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from persona.adapters.base import build_document_metadata, get_adapter_for_path
 from persona.core.detection import LocalDetectionEngine
 from persona.core.masking import deterministic_mask
-from persona.core.placeholders import build_placeholder
+from persona.core.placeholders import build_placeholder, compute_placeholder_integrity_tag
 from persona.core.tokens import stable_token_id
-from persona.models.entities import AnonymizationResult, DetectionMatch, MapEntry, RestoreResult, TextReplacement
+from persona.models.entities import (
+    AnonymizationResult,
+    DetectionMatch,
+    MapEntry,
+    RestoreResult,
+    RestoreIssue,
+    RestoreStats,
+    TextReplacement,
+)
 from persona.review.interactive import review_matches
-from persona.security.keystore import ensure_root_key
+from persona.security.keystore import ensure_root_key, load_root_key
 from persona.security.map_store import decrypt_map_file, encrypt_map_file
+
+
+@dataclass(slots=True)
+class OutputPlan:
+    output_file: Path
+    map_file: Path | None = None
+
+
+@dataclass(slots=True)
+class ReplacementPlan:
+    replacements_by_segment: dict[str, list[TextReplacement]]
+    entries: list[MapEntry]
 
 
 def _default_censored_path(input_path: Path, out_dir: Path) -> Path:
@@ -28,42 +49,34 @@ def _default_map_path(input_path: Path, out_dir: Path) -> Path:
     return out_dir / f"{input_path.stem}.persona-map.json"
 
 
+def plan_anonymize_outputs(input_path: Path, out_dir: Path | None) -> OutputPlan:
+    target_dir = out_dir or input_path.parent
+    return OutputPlan(
+        output_file=_default_censored_path(input_path, target_dir),
+        map_file=_default_map_path(input_path, target_dir),
+    )
+
+
+def plan_restore_outputs(censored_path: Path, out_dir: Path | None) -> OutputPlan:
+    target_dir = out_dir or censored_path.parent
+    return OutputPlan(output_file=_default_restored_path(censored_path, target_dir))
+
+
 def prepare_matches(root_key: bytes, matches: Sequence[DetectionMatch]) -> list[DetectionMatch]:
     prepared: list[DetectionMatch] = []
     for match in matches:
         match.token_id = stable_token_id(root_key, match.entity_type, match.original_value)
         match.masked_value = deterministic_mask(root_key, match.entity_type, match.original_value)
-        match.placeholder = build_placeholder(match.token_id, match.masked_value)
+        integrity_tag = compute_placeholder_integrity_tag(root_key, match.token_id, match.masked_value)
+        match.placeholder = build_placeholder(match.token_id, match.masked_value, integrity_tag=integrity_tag)
         prepared.append(match)
     return prepared
 
 
-def anonymize_file(
-    input_path: Path,
-    password: str,
-    out_dir: Path | None = None,
-    review: bool = True,
-    enabled_entities: Sequence[str] | None = None,
-    report_json: Path | None = None,
-    spacy_model: str = "en_core_web_sm",
-    review_prompt=None,
-    review_console=None,
-) -> AnonymizationResult:
-    adapter = get_adapter_for_path(input_path)
-    target_dir = out_dir or input_path.parent
-    segments = adapter.extract_segments(input_path)
-    detector = LocalDetectionEngine(
-        spacy_model=spacy_model,
-        enabled_entities=tuple(enabled_entities) if enabled_entities else ("PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER"),
-    )
-    root_key = ensure_root_key(password)
-    matches = prepare_matches(root_key, detector.analyze_segments(segments))
-    reviewed_matches = review_matches(matches, prompt=review_prompt or input, console=review_console) if review else matches
-    approved_matches = [match for match in reviewed_matches if match.approved]
-
+def build_replacement_plan(matches: Sequence[DetectionMatch]) -> ReplacementPlan:
     replacements_by_segment: dict[str, list[TextReplacement]] = defaultdict(list)
     entries: list[MapEntry] = []
-    for match in approved_matches:
+    for match in matches:
         replacements_by_segment[match.segment_id].append(
             TextReplacement(
                 start=match.start,
@@ -90,46 +103,109 @@ def anonymize_file(
                 end=match.end,
             )
         )
+    return ReplacementPlan(replacements_by_segment=replacements_by_segment, entries=entries)
 
-    output_path = _default_censored_path(input_path, target_dir)
-    map_path = _default_map_path(input_path, target_dir)
-    adapter.apply_replacements(input_path, output_path, replacements_by_segment)
-    encrypt_map_file(map_path, password, build_document_metadata(input_path), entries)
+
+def build_anonymize_report_payload(
+    input_path: Path,
+    output_plan: OutputPlan,
+    reviewed_matches: Sequence[DetectionMatch],
+    approved_matches: Sequence[DetectionMatch],
+    warnings: Sequence[str],
+) -> dict[str, object]:
+    return {
+        "input_file": str(input_path),
+        "output_file": str(output_plan.output_file),
+        "map_file": str(output_plan.map_file) if output_plan.map_file else None,
+        "approved_matches": len(approved_matches),
+        "rejected_matches": len(reviewed_matches) - len(approved_matches),
+        "warnings": list(warnings),
+        "matches": [
+            {
+                "match_id": match.match_id,
+                "entity_type": match.entity_type,
+                "location": match.location,
+                "original_value": match.original_value,
+                "masked_value": match.masked_value,
+                "placeholder": match.placeholder,
+                "approved": match.approved,
+            }
+            for match in reviewed_matches
+        ],
+    }
+
+
+def build_restore_report_payload(
+    censored_path: Path,
+    output_plan: OutputPlan,
+    stats: RestoreStats,
+) -> dict[str, object]:
+    return {
+        "input_file": str(censored_path),
+        "output_file": str(output_plan.output_file),
+        "restored_count": stats.restored_count,
+        "untouched_invalid_count": stats.untouched_invalid_count,
+        "missing_expected_count": stats.missing_expected_count,
+        "warnings": stats.warnings,
+        "issues": [
+            {
+                "code": issue.code,
+                "message": issue.message,
+                "location": issue.location,
+                "segment_id": issue.segment_id,
+                "token_id": issue.token_id,
+                "placeholder": issue.placeholder,
+            }
+            for issue in stats.issues
+        ],
+    }
+
+
+def write_json_report(path: Path | None, payload: dict[str, object]) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def anonymize_file(
+    input_path: Path,
+    password: str,
+    out_dir: Path | None = None,
+    review: bool = True,
+    enabled_entities: Sequence[str] | None = None,
+    report_json: Path | None = None,
+    spacy_model: str = "en_core_web_sm",
+    review_prompt=None,
+    review_console=None,
+) -> AnonymizationResult:
+    adapter = get_adapter_for_path(input_path)
+    output_plan = plan_anonymize_outputs(input_path, out_dir)
+    segments = adapter.extract_segments(input_path)
+    detector = LocalDetectionEngine(
+        spacy_model=spacy_model,
+        enabled_entities=tuple(enabled_entities) if enabled_entities else ("PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER"),
+    )
+    root_key = ensure_root_key(password)
+    matches = prepare_matches(root_key, detector.analyze_segments(segments))
+    reviewed_matches = review_matches(matches, prompt=review_prompt or input, console=review_console) if review else matches
+    approved_matches = [match for match in reviewed_matches if match.approved]
+    plan = build_replacement_plan(approved_matches)
+
+    adapter.apply_replacements(input_path, output_plan.output_file, plan.replacements_by_segment)
+    assert output_plan.map_file is not None
+    encrypt_map_file(output_plan.map_file, password, build_document_metadata(input_path), plan.entries)
 
     warnings = list(detector.warnings)
-    if report_json:
-        report_json.parent.mkdir(parents=True, exist_ok=True)
-        report_json.write_text(
-            json.dumps(
-                {
-                    "input_file": str(input_path),
-                    "output_file": str(output_path),
-                    "map_file": str(map_path),
-                    "approved_matches": len(approved_matches),
-                    "rejected_matches": len(reviewed_matches) - len(approved_matches),
-                    "warnings": warnings,
-                    "matches": [
-                        {
-                            "match_id": match.match_id,
-                            "entity_type": match.entity_type,
-                            "location": match.location,
-                            "original_value": match.original_value,
-                            "masked_value": match.masked_value,
-                            "placeholder": match.placeholder,
-                            "approved": match.approved,
-                        }
-                        for match in reviewed_matches
-                    ],
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    write_json_report(
+        report_json,
+        build_anonymize_report_payload(input_path, output_plan, reviewed_matches, approved_matches, warnings),
+    )
 
     return AnonymizationResult(
-        output_file=str(output_path),
-        map_file=str(map_path),
-        entries=entries,
+        output_file=str(output_plan.output_file),
+        map_file=str(output_plan.map_file),
+        entries=plan.entries,
         warnings=warnings,
     )
 
@@ -142,34 +218,28 @@ def restore_file(
     report_json: Path | None = None,
 ) -> RestoreResult:
     adapter = get_adapter_for_path(censored_path)
-    target_dir = out_dir or censored_path.parent
-    output_path = _default_restored_path(censored_path, target_dir)
+    output_plan = plan_restore_outputs(censored_path, out_dir)
     document, entries = decrypt_map_file(map_path, password)
-    restored_count, warnings = adapter.restore_file(censored_path, output_path, entries)
+    root_key = load_root_key(password)
+    stats = adapter.restore_file(censored_path, output_plan.output_file, entries, root_key=root_key)
 
     if document.file_format != censored_path.suffix.lower():
-        warnings.append(
-            f"Map format {document.file_format} does not match censored file suffix {censored_path.suffix.lower()}."
+        stats.issues.append(
+            RestoreIssue(
+                code="DOCUMENT_FORMAT_MISMATCH",
+                message=(
+                    f"Map format {document.file_format} does not match censored file suffix {censored_path.suffix.lower()}."
+                ),
+            )
         )
 
-    if report_json:
-        report_json.parent.mkdir(parents=True, exist_ok=True)
-        report_json.write_text(
-            json.dumps(
-                {
-                    "input_file": str(censored_path),
-                    "output_file": str(output_path),
-                    "restored_count": restored_count,
-                    "warnings": warnings,
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    write_json_report(report_json, build_restore_report_payload(censored_path, output_plan, stats))
 
     return RestoreResult(
-        output_file=str(output_path),
-        restored_count=restored_count,
-        warnings=warnings,
+        output_file=str(output_plan.output_file),
+        restored_count=stats.restored_count,
+        untouched_invalid_count=stats.untouched_invalid_count,
+        missing_expected_count=stats.missing_expected_count,
+        issues=stats.issues,
+        warnings=stats.warnings,
     )
-

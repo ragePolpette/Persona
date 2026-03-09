@@ -4,15 +4,20 @@ import hashlib
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from persona.exceptions import UnsupportedFormatError
-from persona.models.entities import DocumentMetadata, MapEntry, TextReplacement, TextSegment
+from persona.exceptions import InputFileError, UnsupportedFormatError
+from persona.models.entities import DocumentMetadata, MapEntry, RestoreStats, TextReplacement, TextSegment
 
 
 def compute_file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except FileNotFoundError as exc:
+        raise InputFileError(f"Input file not found: {path}") from exc
+    except OSError as exc:
+        raise InputFileError(f"Unable to read input file: {path}") from exc
     return digest.hexdigest()
 
 
@@ -47,7 +52,9 @@ class FileAdapter(ABC):
         censored_path: Path,
         output_path: Path,
         entries: list[MapEntry],
-    ) -> tuple[int, list[str]]:
+        *,
+        root_key: bytes | None = None,
+    ) -> RestoreStats:
         raise NotImplementedError
 
 
@@ -61,4 +68,3 @@ def get_adapter_for_path(path: Path) -> FileAdapter:
         if suffix in adapter.supported_suffixes:
             return adapter
     raise UnsupportedFormatError(f"Unsupported file format '{suffix}'. Supported formats: .docx, .xlsx, .pdf")
-

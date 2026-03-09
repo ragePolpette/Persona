@@ -9,7 +9,7 @@ import typer
 
 from persona.core.detection import parse_enabled_entities
 from persona.core.pipeline import anonymize_file, restore_file
-from persona.exceptions import PersonaError
+from persona.exceptions import ExitCode, PasswordResolutionError, PersonaError
 
 app = typer.Typer(
     add_completion=False,
@@ -22,15 +22,15 @@ def _resolve_password(password_prompt: bool, password_env: Optional[str]) -> str
         value = os.environ.get(password_env)
         if value:
             return value
-        raise typer.BadParameter(f"Environment variable '{password_env}' is not set.")
-    if password_prompt or not password_env:
+        raise PasswordResolutionError(f"Environment variable '{password_env}' is not set.")
+    if password_prompt:
         return getpass.getpass("Persona password: ")
-    raise typer.BadParameter("Provide --password-prompt or --password-env.")
+    return getpass.getpass("Persona password: ")
 
 
 @app.command()
 def anonymize(
-    input_file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    input_file: Path = typer.Argument(..., dir_okay=False),
     out_dir: Optional[Path] = typer.Option(None, "--out-dir", file_okay=False),
     review: bool = typer.Option(True, "--review/--no-review"),
     password_prompt: bool = typer.Option(False, "--password-prompt"),
@@ -52,7 +52,10 @@ def anonymize(
         )
     except PersonaError as exc:
         typer.echo(f"Error: {exc}")
-        raise typer.Exit(code=1) from exc
+        raise typer.Exit(code=int(exc.exit_code)) from exc
+    except Exception as exc:
+        typer.echo(f"Error: unexpected internal failure: {exc}")
+        raise typer.Exit(code=int(ExitCode.OPERATIONAL_ERROR)) from exc
 
     typer.echo(f"Censored file: {result.output_file}")
     typer.echo(f"Encrypted map: {result.map_file}")
@@ -63,8 +66,8 @@ def anonymize(
 
 @app.command()
 def restore(
-    censored_file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
-    map_file: Path = typer.Option(..., "--map", exists=True, dir_okay=False, readable=True),
+    censored_file: Path = typer.Argument(..., dir_okay=False),
+    map_file: Path = typer.Option(..., "--map", dir_okay=False),
     out_dir: Optional[Path] = typer.Option(None, "--out-dir", file_okay=False),
     password_prompt: bool = typer.Option(False, "--password-prompt"),
     password_env: Optional[str] = typer.Option(None, "--password-env"),
@@ -83,12 +86,23 @@ def restore(
         )
     except PersonaError as exc:
         typer.echo(f"Error: {exc}")
-        raise typer.Exit(code=1) from exc
+        raise typer.Exit(code=int(exc.exit_code)) from exc
+    except Exception as exc:
+        typer.echo(f"Error: unexpected internal failure: {exc}")
+        raise typer.Exit(code=int(ExitCode.OPERATIONAL_ERROR)) from exc
 
     typer.echo(f"Restored file: {result.output_file}")
+    if result.has_integrity_issues:
+        typer.echo(
+            "Warning: restore completed with integrity issues "
+            f"({result.untouched_invalid_count} invalid placeholder(s), "
+            f"{result.missing_expected_count} missing expected occurrence(s))."
+        )
     if verbose and result.warnings:
         for warning in result.warnings:
             typer.echo(f"Warning: {warning}")
+    if result.has_integrity_issues:
+        raise typer.Exit(code=int(ExitCode.RESTORE_INTEGRITY_ERROR))
 
 
 def main() -> None:
@@ -97,4 +111,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
