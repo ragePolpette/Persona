@@ -1,0 +1,2 @@
+"""Format-agnostic anonymization logic."""
+
