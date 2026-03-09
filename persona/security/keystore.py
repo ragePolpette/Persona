@@ -27,8 +27,16 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def create_keystore(password: str, path: Path = KEYSTORE_PATH, params: Argon2Params = DEFAULT_ARGON2_PARAMS) -> bytes:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def resolve_keystore_path(path: Path | None = None) -> Path:
+    if path is not None:
+        return path
+    override = os.environ.get("PERSONA_KEYSTORE_PATH")
+    return Path(override) if override else KEYSTORE_PATH
+
+
+def create_keystore(password: str, path: Path | None = None, params: Argon2Params = DEFAULT_ARGON2_PARAMS) -> bytes:
+    resolved_path = resolve_keystore_path(path)
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
     root_key = os.urandom(32)
     salt = os.urandom(16)
     nonce = os.urandom(12)
@@ -40,12 +48,13 @@ def create_keystore(password: str, path: Path = KEYSTORE_PATH, params: Argon2Par
         "nonce_b64": _b64encode(nonce),
         "ciphertext_b64": _b64encode(ciphertext),
     }
-    _write_json(path, payload)
+    _write_json(resolved_path, payload)
     return root_key
 
 
-def load_root_key(password: str, path: Path = KEYSTORE_PATH) -> bytes:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+def load_root_key(password: str, path: Path | None = None) -> bytes:
+    resolved_path = resolve_keystore_path(path)
+    payload = json.loads(resolved_path.read_text(encoding="utf-8"))
     params_dict = payload["kdf"]
     params = Argon2Params(
         time_cost=params_dict["time_cost"],
@@ -57,9 +66,9 @@ def load_root_key(password: str, path: Path = KEYSTORE_PATH) -> bytes:
     return AESGCM(kek).decrypt(_b64decode(payload["nonce_b64"]), _b64decode(payload["ciphertext_b64"]), AAD)
 
 
-def ensure_root_key(password: str, path: Path = KEYSTORE_PATH) -> bytes:
+def ensure_root_key(password: str, path: Path | None = None) -> bytes:
+    resolved_path = resolve_keystore_path(path)
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        return load_root_key(password, path=path)
-    return create_keystore(password, path=path)
-
+    if resolved_path.exists():
+        return load_root_key(password, path=resolved_path)
+    return create_keystore(password, path=resolved_path)

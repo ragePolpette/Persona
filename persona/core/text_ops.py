@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from persona.core.placeholders import scan_placeholders
 from persona.models.entities import MapEntry, TextReplacement
@@ -21,15 +21,27 @@ def strict_restore_text(text: str, entries: list[MapEntry]) -> tuple[str, list[s
     warnings: list[str] = []
     expected_by_token: dict[str, set[str]] = defaultdict(set)
     placeholder_to_original: dict[str, str] = {}
+    expected_counts: Counter[str] = Counter()
+    placeholder_to_token: dict[str, str] = {}
     for entry in entries:
         expected_by_token[entry.token_id].add(entry.placeholder)
         placeholder_to_original[entry.placeholder] = entry.original_value
+        placeholder_to_token[entry.placeholder] = entry.token_id
+        expected_counts[entry.placeholder] += 1
 
     for placeholder in scan_placeholders(text):
         expected = expected_by_token.get(placeholder.token_id)
         if expected and placeholder.raw_value not in expected:
             warnings.append(
                 f"Placeholder altered at offset {placeholder.start}: token {placeholder.token_id} left untouched."
+            )
+
+    for placeholder, expected_count in expected_counts.items():
+        actual_count = text.count(placeholder)
+        if actual_count < expected_count:
+            warnings.append(
+                f"Expected {expected_count} placeholder occurrence(s) for token "
+                f"{placeholder_to_token[placeholder]}, found {actual_count}. Some placeholders were altered."
             )
 
     restored = text
@@ -40,4 +52,3 @@ def strict_restore_text(text: str, entries: list[MapEntry]) -> tuple[str, list[s
             restored = restored.replace(placeholder, original_value)
             restored_count += occurrences
     return restored, warnings, restored_count
-
