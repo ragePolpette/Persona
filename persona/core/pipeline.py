@@ -6,13 +6,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from persona.adapters.base import build_document_metadata, get_adapter_for_path
+from persona.adapters.base import build_document_metadata, build_file_fingerprint, get_adapter_for_path
+from persona.core.binding import (
+    PRAGMATIC_BINDING_MODE,
+    STRICT_BINDING_MODE,
+    SUPPORTED_BINDING_MODES,
+    evaluate_document_binding,
+)
 from persona.core.detection import LocalDetectionEngine
 from persona.core.masking import deterministic_mask
 from persona.core.placeholders import build_placeholder, compute_placeholder_integrity_tag
 from persona.core.tokens import stable_token_id
 from persona.models.entities import (
     AnonymizationResult,
+    BindingMetadata,
     DetectionMatch,
     MapEntry,
     RestoreResult,
@@ -23,6 +30,7 @@ from persona.models.entities import (
 from persona.review.interactive import review_matches
 from persona.security.keystore import ensure_root_key, load_root_key
 from persona.security.map_store import decrypt_map_file, encrypt_map_file
+from persona.exceptions import InputValidationError, StrictBindingFailureError
 
 
 @dataclass(slots=True)
@@ -139,10 +147,24 @@ def build_restore_report_payload(
     censored_path: Path,
     output_plan: OutputPlan,
     stats: RestoreStats,
+    *,
+    binding_mode: str,
+    binding_status: str,
+    binding_checks,
 ) -> dict[str, object]:
     return {
         "input_file": str(censored_path),
         "output_file": str(output_plan.output_file),
+        "binding_mode": binding_mode,
+        "binding_status": binding_status,
+        "binding_checks": [
+            {
+                "code": check.code,
+                "status": check.status,
+                "detail": check.detail,
+            }
+            for check in binding_checks
+        ],
         "restored_count": stats.restored_count,
         "untouched_invalid_count": stats.untouched_invalid_count,
         "missing_expected_count": stats.missing_expected_count,
@@ -187,14 +209,29 @@ def anonymize_file(
         enabled_entities=tuple(enabled_entities) if enabled_entities else ("PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER"),
     )
     root_key = ensure_root_key(password)
+    original_fingerprint = build_file_fingerprint(input_path, segments)
     matches = prepare_matches(root_key, detector.analyze_segments(segments))
     reviewed_matches = review_matches(matches, prompt=review_prompt or input, console=review_console) if review else matches
     approved_matches = [match for match in reviewed_matches if match.approved]
     plan = build_replacement_plan(approved_matches)
 
     adapter.apply_replacements(input_path, output_plan.output_file, plan.replacements_by_segment)
+    censored_segments = adapter.extract_segments(output_plan.output_file)
+    censored_fingerprint = build_file_fingerprint(output_plan.output_file, censored_segments)
+    binding = BindingMetadata(
+        version=1,
+        original=original_fingerprint,
+        censored=censored_fingerprint,
+        entry_count=len(plan.entries),
+    )
     assert output_plan.map_file is not None
-    encrypt_map_file(output_plan.map_file, password, build_document_metadata(input_path), plan.entries)
+    encrypt_map_file(
+        output_plan.map_file,
+        password,
+        build_document_metadata(input_path),
+        plan.entries,
+        binding=binding,
+    )
 
     warnings = list(detector.warnings)
     write_json_report(
@@ -216,30 +253,55 @@ def restore_file(
     password: str,
     out_dir: Path | None = None,
     report_json: Path | None = None,
+    binding_mode: str = PRAGMATIC_BINDING_MODE,
 ) -> RestoreResult:
+    if binding_mode not in SUPPORTED_BINDING_MODES:
+        raise InputValidationError(f"Unsupported binding mode '{binding_mode}'.")
     adapter = get_adapter_for_path(censored_path)
     output_plan = plan_restore_outputs(censored_path, out_dir)
-    document, entries = decrypt_map_file(map_path, password)
+    _document, entries, binding = decrypt_map_file(map_path, password)
+    current_segments = adapter.extract_segments(censored_path)
+    current_fingerprint = build_file_fingerprint(censored_path, current_segments)
+    binding_assessment = evaluate_document_binding(current_fingerprint, binding, mode=binding_mode)
+
+    if binding_assessment.refused:
+        write_json_report(
+            report_json,
+            build_restore_report_payload(
+                censored_path,
+                output_plan,
+                RestoreStats(issues=binding_assessment.issues),
+                binding_mode=binding_mode,
+                binding_status=binding_assessment.status,
+                binding_checks=binding_assessment.checks,
+            ),
+        )
+        raise StrictBindingFailureError("Strict binding checks refused restore for this file/map pair.")
+
     root_key = load_root_key(password)
     stats = adapter.restore_file(censored_path, output_plan.output_file, entries, root_key=root_key)
+    stats.issues.extend(binding_assessment.issues)
 
-    if document.file_format != censored_path.suffix.lower():
-        stats.issues.append(
-            RestoreIssue(
-                code="DOCUMENT_FORMAT_MISMATCH",
-                message=(
-                    f"Map format {document.file_format} does not match censored file suffix {censored_path.suffix.lower()}."
-                ),
-            )
-        )
-
-    write_json_report(report_json, build_restore_report_payload(censored_path, output_plan, stats))
+    write_json_report(
+        report_json,
+        build_restore_report_payload(
+            censored_path,
+            output_plan,
+            stats,
+            binding_mode=binding_mode,
+            binding_status=binding_assessment.status,
+            binding_checks=binding_assessment.checks,
+        ),
+    )
 
     return RestoreResult(
         output_file=str(output_plan.output_file),
         restored_count=stats.restored_count,
         untouched_invalid_count=stats.untouched_invalid_count,
         missing_expected_count=stats.missing_expected_count,
+        binding_mode=binding_mode,
+        binding_status=binding_assessment.status,
+        binding_checks=binding_assessment.checks,
         issues=stats.issues,
         warnings=stats.warnings,
     )

@@ -30,6 +30,12 @@ class InputFileError(PersonaError):
     exit_code = ExitCode.INPUT_ERROR
 
 
+class InputValidationError(PersonaError):
+    """Raised when user-supplied CLI options are invalid."""
+
+    exit_code = ExitCode.INPUT_ERROR
+
+
 class PasswordResolutionError(PersonaError):
     """Raised when the password cannot be resolved from prompt or environment."""
 
@@ -82,6 +88,10 @@ class RestoreIntegrityError(PersonaError):
     """Raised when restore encounters integrity failures severe enough to stop processing."""
 
     exit_code = ExitCode.RESTORE_INTEGRITY_ERROR
+
+
+class StrictBindingFailureError(RestoreIntegrityError):
+    """Raised when strict document binding checks refuse the restore before output generation."""
 
 
 class DetectionUnavailableError(PersonaError):

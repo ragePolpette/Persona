@@ -74,6 +74,7 @@ The encrypted map contains at least:
 
 - format version
 - document metadata
+- document-binding metadata for original and censored files
 - token id
 - entity type
 - original value
@@ -87,7 +88,12 @@ Map files are encrypted with:
 
 ## Strict restore
 
-Restore is strict by default.
+Restore now separates two concerns:
+
+- placeholder strictness
+- document binding policy
+
+Placeholder strictness remains always on:
 
 - exact intact placeholders are restored
 - altered placeholders are not restored
@@ -95,7 +101,32 @@ Restore is strict by default.
 - malformed, duplicate, and unexpected placeholders are left in place
 - structured issues and counts are emitted in the restore report
 
-This avoids restoring text into placeholders that no longer match the encrypted map.
+Document binding has two modes:
+
+- `pragmatic` is the default. Persona evaluates whether the supplied censored file is reasonably compatible with the encrypted map and may continue restore with warnings/issues when the match is weak.
+- `strict` requires strong compatibility. If the supplied file does not match the encrypted binding metadata closely enough, restore is refused before output is written.
+
+This avoids restoring text into placeholders that no longer match the encrypted map and reduces the risk of using the right map with the wrong censored file.
+
+## Document binding metadata
+
+When Persona writes a censored file, it re-opens that output through the same adapter and stores encrypted binding metadata including:
+
+- exact file fingerprint
+- logical-content fingerprint derived from extracted segments
+- structural fingerprint derived from segment ids and container types
+- segment count
+- file format
+
+During restore, the current file is fingerprinted again and compared with the encrypted binding metadata.
+
+Current policy notes:
+
+- exact file fingerprint mismatch is reported explicitly
+- strong binding currently requires matching file format, logical fingerprint, structure fingerprint, and segment count
+- PDF binding is weaker in practice because it depends on best-effort text extraction
+- no Persona marker is currently embedded inside DOCX, XLSX, or PDF outputs
+- legacy maps without binding metadata remain usable only in `pragmatic` mode
 
 ## Failure normalization
 
@@ -106,6 +137,8 @@ Keystore and map failures are normalized into domain errors for:
 - malformed encryption envelope
 - AES-GCM authentication failure
 - malformed decrypted payload
+- strict binding refusal
+- file/map compatibility failure in strict mode
 
 ## Non-goals in v1
 

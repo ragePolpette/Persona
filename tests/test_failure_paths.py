@@ -12,7 +12,7 @@ from docx import Document
 from typer.testing import CliRunner
 
 from persona.cli import app
-from persona.core.pipeline import anonymize_file
+from persona.core.pipeline import anonymize_file, restore_file
 from persona.core.placeholders import build_placeholder, compute_placeholder_integrity_tag
 from persona.core.text_ops import strict_restore_text
 from persona.exceptions import (
@@ -328,6 +328,215 @@ def test_cli_returns_restore_integrity_exit_code_on_partial_restore(tmp_path: Pa
     assert result.exit_code == 4
     assert "Restored file:" in result.stdout
     assert "integrity issues" in result.stdout
+
+
+def test_pragmatic_binding_allows_modified_censored_file_with_issue(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_path = tmp_path / "source.docx"
+    model_path = _build_test_model(tmp_path)
+    monkeypatch.setenv("PERSONA_KEYSTORE_PATH", str(tmp_path / "keystore.json"))
+    document = Document()
+    document.add_paragraph("Mario Rossi")
+    document.save(input_path)
+    anonymize_result = anonymize_file(
+        input_path=input_path,
+        password="correct-password",
+        out_dir=tmp_path,
+        review=False,
+        enabled_entities=("PERSON",),
+        spacy_model=str(model_path),
+    )
+    edited = Document(anonymize_result.output_file)
+    edited.add_paragraph("Extra paragraph")
+    edited.save(anonymize_result.output_file)
+
+    restore_result = restore_file(
+        censored_path=Path(anonymize_result.output_file),
+        map_path=Path(anonymize_result.map_file),
+        password="correct-password",
+        out_dir=tmp_path,
+        binding_mode="pragmatic",
+    )
+
+    assert restore_result.binding_mode == "pragmatic"
+    assert restore_result.binding_status == "weak"
+    assert any(issue.code == "DOCUMENT_BINDING_WEAK" for issue in restore_result.issues)
+
+
+def test_strict_binding_refuses_modified_censored_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from persona.exceptions import StrictBindingFailureError
+
+    input_path = tmp_path / "source.docx"
+    model_path = _build_test_model(tmp_path)
+    monkeypatch.setenv("PERSONA_KEYSTORE_PATH", str(tmp_path / "keystore.json"))
+    document = Document()
+    document.add_paragraph("Mario Rossi")
+    document.save(input_path)
+    anonymize_result = anonymize_file(
+        input_path=input_path,
+        password="correct-password",
+        out_dir=tmp_path,
+        review=False,
+        enabled_entities=("PERSON",),
+        spacy_model=str(model_path),
+    )
+    edited = Document(anonymize_result.output_file)
+    edited.add_paragraph("Extra paragraph")
+    edited.save(anonymize_result.output_file)
+
+    with pytest.raises(StrictBindingFailureError):
+        restore_file(
+            censored_path=Path(anonymize_result.output_file),
+            map_path=Path(anonymize_result.map_file),
+            password="correct-password",
+            out_dir=tmp_path,
+            binding_mode="strict",
+        )
+
+
+def test_pragmatic_binding_with_wrong_same_format_file_reports_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_path = tmp_path / "source.docx"
+    other_path = tmp_path / "other.docx"
+    model_path = _build_test_model(tmp_path)
+    monkeypatch.setenv("PERSONA_KEYSTORE_PATH", str(tmp_path / "keystore.json"))
+    document = Document()
+    document.add_paragraph("Mario Rossi")
+    document.save(input_path)
+    other_document = Document()
+    other_document.add_paragraph("Completely unrelated")
+    other_document.save(other_path)
+    anonymize_result = anonymize_file(
+        input_path=input_path,
+        password="correct-password",
+        out_dir=tmp_path,
+        review=False,
+        enabled_entities=("PERSON",),
+        spacy_model=str(model_path),
+    )
+
+    restore_result = restore_file(
+        censored_path=other_path,
+        map_path=Path(anonymize_result.map_file),
+        password="correct-password",
+        out_dir=tmp_path,
+        binding_mode="pragmatic",
+    )
+
+    assert restore_result.binding_status == "weak"
+    assert any(issue.code == "LOGICAL_FINGERPRINT_MISMATCH" for issue in restore_result.issues)
+    assert any(issue.code == "DOCUMENT_BINDING_WEAK" for issue in restore_result.issues)
+
+
+def test_strict_binding_refuses_format_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from persona.exceptions import StrictBindingFailureError
+    from openpyxl import Workbook
+
+    input_path = tmp_path / "source.docx"
+    wrong_format_path = tmp_path / "wrong.xlsx"
+    model_path = _build_test_model(tmp_path)
+    monkeypatch.setenv("PERSONA_KEYSTORE_PATH", str(tmp_path / "keystore.json"))
+    document = Document()
+    document.add_paragraph("Mario Rossi")
+    document.save(input_path)
+    workbook = Workbook()
+    workbook.active["A1"] = "placeholder"
+    workbook.save(wrong_format_path)
+    anonymize_result = anonymize_file(
+        input_path=input_path,
+        password="correct-password",
+        out_dir=tmp_path,
+        review=False,
+        enabled_entities=("PERSON",),
+        spacy_model=str(model_path),
+    )
+
+    with pytest.raises(StrictBindingFailureError):
+        restore_file(
+            censored_path=wrong_format_path,
+            map_path=Path(anonymize_result.map_file),
+            password="correct-password",
+            out_dir=tmp_path,
+            binding_mode="strict",
+        )
+
+
+def test_strict_binding_refuses_legacy_map_without_binding_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from persona.exceptions import StrictBindingFailureError
+
+    input_path = tmp_path / "source.docx"
+    model_path = _build_test_model(tmp_path)
+    monkeypatch.setenv("PERSONA_KEYSTORE_PATH", str(tmp_path / "keystore.json"))
+    document = Document()
+    document.add_paragraph("Mario Rossi")
+    document.save(input_path)
+    anonymize_result = anonymize_file(
+        input_path=input_path,
+        password="correct-password",
+        out_dir=tmp_path,
+        review=False,
+        enabled_entities=("PERSON",),
+        spacy_model=str(model_path),
+    )
+    map_path = Path(anonymize_result.map_file)
+    envelope = json.loads(map_path.read_text(encoding="utf-8"))
+    plaintext_document, plaintext_entries, _ = decrypt_map_file(map_path, "correct-password")
+    encrypt_map_file(map_path, "correct-password", plaintext_document, plaintext_entries, binding=None, params=FAST_PARAMS)
+
+    with pytest.raises(StrictBindingFailureError):
+        restore_file(
+            censored_path=Path(anonymize_result.output_file),
+            map_path=map_path,
+            password="correct-password",
+            out_dir=tmp_path,
+            binding_mode="strict",
+        )
+
+
+def test_cli_strict_binding_failure_writes_report_and_no_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_path = tmp_path / "source.docx"
+    model_path = _build_test_model(tmp_path)
+    monkeypatch.setenv("PERSONA_KEYSTORE_PATH", str(tmp_path / "keystore.json"))
+    document = Document()
+    document.add_paragraph("Mario Rossi")
+    document.save(input_path)
+    anonymize_result = anonymize_file(
+        input_path=input_path,
+        password="correct-password",
+        out_dir=tmp_path,
+        review=False,
+        enabled_entities=("PERSON",),
+        spacy_model=str(model_path),
+    )
+    tampered = Document(anonymize_result.output_file)
+    tampered.add_paragraph("Extra paragraph")
+    tampered.save(anonymize_result.output_file)
+    report_path = tmp_path / "strict-report.json"
+    expected_output = tmp_path / "source.censored.restored.docx"
+
+    result = RUNNER.invoke(
+        app,
+        [
+            "restore",
+            str(anonymize_result.output_file),
+            "--map",
+            str(anonymize_result.map_file),
+            "--password-env",
+            "PERSONA_PASSWORD",
+            "--binding-mode",
+            "strict",
+            "--report-json",
+            str(report_path),
+        ],
+        env={"PERSONA_PASSWORD": "correct-password", "PERSONA_KEYSTORE_PATH": str(tmp_path / "keystore.json")},
+    )
+
+    assert result.exit_code == 4
+    assert "Strict binding checks refused restore" in result.stdout
+    assert report_path.exists()
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["binding_mode"] == "strict"
+    assert report["binding_status"] == "refused"
+    assert any(issue["code"] == "STRICT_BINDING_REFUSED" for issue in report["issues"])
+    assert not expected_output.exists()
 
 
 def test_cli_returns_password_resolution_error_when_env_missing() -> None:

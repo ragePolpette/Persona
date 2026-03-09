@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from persona.config import MAP_VERSION
 from persona.exceptions import CorruptMapError, InputFileError, MapDecryptionError
-from persona.models.entities import DocumentMetadata, MapEntry
+from persona.models.entities import BindingMetadata, DocumentMetadata, MapEntry
 from persona.security.argon2_utils import DEFAULT_ARGON2_PARAMS, Argon2Params, derive_key
 
 AAD = b"persona-map-v1"
@@ -77,17 +77,25 @@ def _load_plaintext_payload(plaintext: bytes) -> dict[str, Any]:
             raise TypeError
         DocumentMetadata(**document)
         [MapEntry.from_dict(item) for item in entries]
+        if "binding" in payload and payload["binding"] is not None:
+            BindingMetadata.from_dict(payload["binding"])
     except (KeyError, TypeError, ValueError) as exc:
         raise CorruptMapError("Decrypted map payload is missing required document or entry fields.") from exc
     return payload
 
 
-def serialize_map_payload(document: DocumentMetadata, entries: list[MapEntry]) -> bytes:
+def serialize_map_payload(
+    document: DocumentMetadata,
+    entries: list[MapEntry],
+    binding: BindingMetadata | None = None,
+) -> bytes:
     payload = {
         "version": MAP_VERSION,
         "document": document.to_dict(),
         "entries": [entry.to_dict() for entry in entries],
     }
+    if binding is not None:
+        payload["binding"] = binding.to_dict()
     return json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
 
 
@@ -96,12 +104,13 @@ def encrypt_map_file(
     password: str,
     document: DocumentMetadata,
     entries: list[MapEntry],
+    binding: BindingMetadata | None = None,
     params: Argon2Params = DEFAULT_ARGON2_PARAMS,
 ) -> None:
     salt = os.urandom(16)
     nonce = os.urandom(12)
     key = derive_key(password, salt, params=params)
-    plaintext = serialize_map_payload(document, entries)
+    plaintext = serialize_map_payload(document, entries, binding=binding)
     ciphertext = AESGCM(key).encrypt(nonce, plaintext, AAD)
     envelope = {
         "version": MAP_VERSION,
@@ -113,7 +122,7 @@ def encrypt_map_file(
     path.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
 
 
-def decrypt_map_file(path: Path, password: str) -> tuple[DocumentMetadata, list[MapEntry]]:
+def decrypt_map_file(path: Path, password: str) -> tuple[DocumentMetadata, list[MapEntry], BindingMetadata | None]:
     envelope = _parse_map_envelope(path)
     params, salt = _extract_envelope_kdf(envelope)
     try:
@@ -133,4 +142,5 @@ def decrypt_map_file(path: Path, password: str) -> tuple[DocumentMetadata, list[
     payload = _load_plaintext_payload(plaintext)
     document = DocumentMetadata(**payload["document"])
     entries = [MapEntry.from_dict(item) for item in payload["entries"]]
-    return document, entries
+    binding = BindingMetadata.from_dict(payload["binding"]) if "binding" in payload else None
+    return document, entries, binding

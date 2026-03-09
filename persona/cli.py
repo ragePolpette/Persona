@@ -7,9 +7,10 @@ from typing import Optional
 
 import typer
 
+from persona.core.binding import PRAGMATIC_BINDING_MODE, STRICT_BINDING_MODE, SUPPORTED_BINDING_MODES
 from persona.core.detection import parse_enabled_entities
 from persona.core.pipeline import anonymize_file, restore_file
-from persona.exceptions import ExitCode, PasswordResolutionError, PersonaError
+from persona.exceptions import ExitCode, InputValidationError, PasswordResolutionError, PersonaError
 
 app = typer.Typer(
     add_completion=False,
@@ -71,11 +72,17 @@ def restore(
     out_dir: Optional[Path] = typer.Option(None, "--out-dir", file_okay=False),
     password_prompt: bool = typer.Option(False, "--password-prompt"),
     password_env: Optional[str] = typer.Option(None, "--password-env"),
+    binding_mode: str = typer.Option(PRAGMATIC_BINDING_MODE, "--binding-mode"),
     verbose: bool = typer.Option(False, "--verbose"),
     report_json: Optional[Path] = typer.Option(None, "--report-json", dir_okay=False),
 ) -> None:
     """Restore a censored file from a validated encrypted map."""
     try:
+        normalized_binding_mode = binding_mode.strip().lower()
+        if normalized_binding_mode not in SUPPORTED_BINDING_MODES:
+            raise InputValidationError(
+                f"Unsupported binding mode '{binding_mode}'. Use '{PRAGMATIC_BINDING_MODE}' or '{STRICT_BINDING_MODE}'."
+            )
         password = _resolve_password(password_prompt, password_env)
         result = restore_file(
             censored_path=censored_file,
@@ -83,6 +90,7 @@ def restore(
             password=password,
             out_dir=out_dir,
             report_json=report_json,
+            binding_mode=normalized_binding_mode,
         )
     except PersonaError as exc:
         typer.echo(f"Error: {exc}")
@@ -95,7 +103,8 @@ def restore(
     if result.has_integrity_issues:
         typer.echo(
             "Warning: restore completed with integrity issues "
-            f"({result.untouched_invalid_count} invalid placeholder(s), "
+            f"(binding={result.binding_status}, "
+            f"{result.untouched_invalid_count} invalid placeholder(s), "
             f"{result.missing_expected_count} missing expected occurrence(s))."
         )
     if verbose and result.warnings:

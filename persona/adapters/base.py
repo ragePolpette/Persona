@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from persona.exceptions import InputFileError, UnsupportedFormatError
-from persona.models.entities import DocumentMetadata, MapEntry, RestoreStats, TextReplacement, TextSegment
+from persona.models.entities import DocumentMetadata, FileFingerprint, MapEntry, RestoreStats, TextReplacement, TextSegment
 
 
 def compute_file_sha256(path: Path) -> str:
@@ -21,12 +21,44 @@ def compute_file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def compute_logical_sha256(segments: list[TextSegment]) -> str:
+    digest = hashlib.sha256()
+    for segment in segments:
+        digest.update(segment.segment_id.encode("utf-8"))
+        digest.update(b"\x1f")
+        digest.update(segment.text.encode("utf-8"))
+        digest.update(b"\x1e")
+    return digest.hexdigest()
+
+
+def compute_structure_sha256(segments: list[TextSegment]) -> str:
+    digest = hashlib.sha256()
+    for segment in segments:
+        digest.update(segment.segment_id.encode("utf-8"))
+        digest.update(b"\x1f")
+        digest.update(segment.container_type.encode("utf-8"))
+        digest.update(b"\x1e")
+    return digest.hexdigest()
+
+
 def build_document_metadata(path: Path) -> DocumentMetadata:
     return DocumentMetadata(
         source_name=path.name,
         source_path=str(path.resolve()),
         file_format=path.suffix.lower(),
         content_sha256=compute_file_sha256(path),
+    )
+
+
+def build_file_fingerprint(path: Path, segments: list[TextSegment]) -> FileFingerprint:
+    return FileFingerprint(
+        file_name=path.name,
+        file_stem=path.stem,
+        file_format=path.suffix.lower(),
+        file_sha256=compute_file_sha256(path),
+        logical_sha256=compute_logical_sha256(segments),
+        structure_sha256=compute_structure_sha256(segments),
+        segment_count=len(segments),
     )
 
 

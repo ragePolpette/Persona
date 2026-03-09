@@ -18,6 +18,7 @@ There is no database, no background worker, no remote service, and no distribute
 - deterministic keyed token generation
 - deterministic masked payload generation
 - placeholder creation, integrity tagging, and validation
+- document-binding evaluation
 - text replacement logic
 - detection orchestration
 - anonymize and restore pipeline functions
@@ -30,6 +31,7 @@ There is no database, no background worker, no remote service, and no distribute
 - persistent local keystore handling
 - AES-256-GCM map encryption and decryption
 - map format versioning
+- encrypted storage of document-binding metadata
 - exception normalization for malformed keystore/map inputs
 
 ## Adapter responsibilities
@@ -72,16 +74,39 @@ Each adapter owns:
 7. Run interactive review unless `--no-review` is used.
 8. Build a replacement plan and encrypted map entries.
 9. Write censored copy through the adapter.
-10. Encrypt the local map file.
+10. Re-open the censored output and derive binding fingerprints from its extracted logical segments.
+11. Encrypt the local map file, including both original and censored-file binding metadata.
 
 ### Restore
 
 1. Decrypt the map with the user password.
 2. Load the existing local root key with the same password.
-3. Re-open the censored file with the proper adapter.
-4. Validate placeholders strictly.
-5. Restore only expected intact placeholders.
-6. Leave altered, malformed, duplicate, or unexpected placeholders untouched and report structured issues.
+3. Re-open the provided censored file with the proper adapter.
+4. Derive current file fingerprints from the extracted logical segments.
+5. Evaluate document binding between the current file and the encrypted map.
+6. In `strict` binding mode, refuse restore early if the binding checks are not strong enough.
+7. Validate placeholders strictly.
+8. Restore only expected intact placeholders.
+9. Leave altered, malformed, duplicate, unexpected, or binding-incompatible situations reported as structured issues.
+
+## Document binding model
+
+Persona now stores additional encrypted binding metadata for:
+
+- original input file fingerprint
+- censored output file fingerprint
+- logical-content fingerprint
+- structural fingerprint
+- segment count
+
+During restore the current file is re-extracted through the adapter and compared against the encrypted binding metadata.
+
+Two restore policies exist:
+
+- `pragmatic`: continue restore when compatibility is weak but not strong enough for full trust, and report binding issues
+- `strict`: require a strong match on the main binding checks and refuse restore before writing output when the file/map pair is not sufficiently compatible
+
+The current implementation does not inject a Persona marker into the generated files themselves. Binding is map-driven and based on deterministic metadata derived from the file bytes and extracted logical structure.
 
 ## Design choices
 
@@ -90,3 +115,4 @@ Each adapter owns:
 - Prefer small, testable helpers over deep abstraction layers.
 - Keep format-specific logic in adapters rather than leaking it into the core.
 - Keep restore strict and report partial failures explicitly instead of auto-healing them.
+- Keep document binding explicit and testable rather than hiding it behind opaque restore heuristics.

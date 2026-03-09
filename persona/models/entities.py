@@ -16,6 +16,52 @@ class DocumentMetadata:
 
 
 @dataclass(slots=True)
+class FileFingerprint:
+    file_name: str
+    file_stem: str
+    file_format: str
+    file_sha256: str
+    logical_sha256: str
+    structure_sha256: str
+    segment_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "FileFingerprint":
+        return cls(**payload)
+
+
+@dataclass(slots=True)
+class BindingMetadata:
+    version: int
+    original: FileFingerprint
+    censored: FileFingerprint
+    entry_count: int
+    marker_support: str = "none"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "original": self.original.to_dict(),
+            "censored": self.censored.to_dict(),
+            "entry_count": self.entry_count,
+            "marker_support": self.marker_support,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "BindingMetadata":
+        return cls(
+            version=payload["version"],
+            original=FileFingerprint.from_dict(payload["original"]),
+            censored=FileFingerprint.from_dict(payload["censored"]),
+            entry_count=payload["entry_count"],
+            marker_support=payload.get("marker_support", "none"),
+        )
+
+
+@dataclass(slots=True)
 class TextSegment:
     segment_id: str
     location: str
@@ -88,12 +134,20 @@ class RestoreResult:
     restored_count: int
     untouched_invalid_count: int
     missing_expected_count: int
+    binding_mode: str
+    binding_status: str
+    binding_checks: list["BindingCheck"]
     issues: list["RestoreIssue"]
     warnings: list[str]
 
     @property
     def has_integrity_issues(self) -> bool:
-        return self.untouched_invalid_count > 0 or self.missing_expected_count > 0
+        return (
+            self.untouched_invalid_count > 0
+            or self.missing_expected_count > 0
+            or self.binding_status != "bound"
+            or bool(self.issues)
+        )
 
 
 @dataclass(slots=True)
@@ -104,6 +158,13 @@ class RestoreIssue:
     segment_id: str = ""
     token_id: str = ""
     placeholder: str = ""
+
+
+@dataclass(slots=True)
+class BindingCheck:
+    code: str
+    status: str
+    detail: str
 
 
 @dataclass(slots=True)

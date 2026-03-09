@@ -71,10 +71,11 @@ def test_map_encryption_round_trip(tmp_path: Path) -> None:
     )
 
     encrypt_map_file(map_path, "correct horse battery staple", document, [entry], params=FAST_PARAMS)
-    restored_document, restored_entries = decrypt_map_file(map_path, "correct horse battery staple")
+    restored_document, restored_entries, restored_binding = decrypt_map_file(map_path, "correct horse battery staple")
 
     assert restored_document == document
     assert restored_entries == [entry]
+    assert restored_binding is None
 
 
 def test_placeholder_validation_round_trip() -> None:
