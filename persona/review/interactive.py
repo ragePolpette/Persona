@@ -22,8 +22,11 @@ def review_matches(
     rejected_count = 0
     for match in matches:
         active_console.print(f"\n[bold]Match {match.match_id}[/bold]")
-        active_console.print(f"Type: {match.entity_type}")
-        active_console.print(f"Value: {match.original_value}")
+        active_console.print(f"Label: {match.entity_type}")
+        active_console.print(f"Block: {match.original_value}")
+        if match.reason:
+            active_console.print(f"Reason: {match.reason}")
+        active_console.print(f"Confidence: {match.score:.2f}")
         active_console.print(f"Context: {match.context}")
         active_console.print(f"Location: {match.location}")
         active_console.print(f"Proposed: {match.placeholder}")

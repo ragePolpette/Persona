@@ -73,8 +73,10 @@ def plan_restore_outputs(censored_path: Path, out_dir: Path | None) -> OutputPla
 def prepare_matches(root_key: bytes, matches: Sequence[DetectionMatch]) -> list[DetectionMatch]:
     prepared: list[DetectionMatch] = []
     for match in matches:
-        match.token_id = stable_token_id(root_key, match.entity_type, match.original_value)
-        match.masked_value = deterministic_mask(root_key, match.entity_type, match.original_value)
+        if not match.token_id:
+            match.token_id = stable_token_id(root_key, match.entity_type, match.original_value)
+        if not match.masked_value:
+            match.masked_value = deterministic_mask(root_key, match.entity_type, match.original_value)
         integrity_tag = compute_placeholder_integrity_tag(root_key, match.token_id, match.masked_value)
         match.placeholder = build_placeholder(match.token_id, match.masked_value, integrity_tag=integrity_tag)
         prepared.append(match)
@@ -109,6 +111,9 @@ def build_replacement_plan(matches: Sequence[DetectionMatch]) -> ReplacementPlan
                 segment_id=match.segment_id,
                 start=match.start,
                 end=match.end,
+                score=match.score,
+                reason=match.reason,
+                metadata=dict(match.metadata),
             )
         )
     return ReplacementPlan(replacements_by_segment=replacements_by_segment, entries=entries)
@@ -212,6 +217,7 @@ def anonymize_file(
     original_fingerprint = build_file_fingerprint(input_path, segments)
     matches = prepare_matches(root_key, detector.analyze_segments(segments))
     reviewed_matches = review_matches(matches, prompt=review_prompt or input, console=review_console) if review else matches
+    reviewed_matches = prepare_matches(root_key, reviewed_matches)
     approved_matches = [match for match in reviewed_matches if match.approved]
     plan = build_replacement_plan(approved_matches)
 

@@ -98,7 +98,19 @@ class DetectionUnavailableError(PersonaError):
     """Raised when local detection cannot be initialized."""
 
 
+class LLMBackendError(PersonaError):
+    """Raised when the configured local LLM backend is unavailable or fails."""
+
+
+class LLMOutputValidationError(LLMBackendError):
+    """Raised when the local LLM returns output that cannot be validated."""
+
+
 class DocumentProcessingError(PersonaError):
     """Raised when a supported file cannot be processed reliably."""
 
     exit_code = ExitCode.INPUT_ERROR
+
+
+class StorageError(PersonaError):
+    """Raised when Persona local-app storage cannot be read or written."""

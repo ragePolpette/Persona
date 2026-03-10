@@ -1,149 +1,181 @@
 # Security
 
-## Threat model for v1
+## Scope
 
-Persona reduces the risk of exposing raw sensitive text to external AI tools by keeping anonymization and restore local. It does not defend against a compromised workstation, malware, or a stolen unlocked user session.
+Persona is a local/offline anonymization system. The security goal is not endpoint hardening; it is controlled reversible anonymization of local documents without sending content to cloud services.
 
-## Keystore
+This design still does not defend against:
 
-On first use, Persona creates a local persistent root key.
+- compromised hosts
+- malware on the user workstation
+- memory scraping on an unlocked machine
+- theft of decrypted working files
 
-- the root key is random
-- the root key is stored encrypted on disk
-- the encryption key is derived from the user password with Argon2id
-- the keystore payload is protected with AES-256-GCM
+## Security-critical split
 
-The persistent root key is used for deterministic keyed token generation across sessions.
+The new LLM-guided detection path changes what identifies sensitive content, but it does not change the deterministic security core.
 
-## Deterministic token ids
+Security-relevant responsibilities remain split as follows:
 
-Stable ids are derived conceptually as:
+- local LLM backend
+  - identifies sensitive blocks only
+- deterministic engine
+  - generates stable token ids
+  - generates masked blocks
+  - creates placeholders
+  - writes encrypted maps
+  - restores original values
+  - verifies binding and placeholder integrity
 
-```text
-token_id = HMAC(root_key, canonical(entity_type + ":" + original_value))
-```
+The LLM never generates placeholders or replacement text directly.
+
+## Root key and keystore
+
+Persona still uses a persistent local root key.
 
 Properties:
 
-- deterministic with the same local root key
-- different across different root keys
-- not a plain public hash of the original value
+- generated randomly on first use
+- stored encrypted on disk
+- wrapped with a password-derived key
+- used for stable token ids and deterministic masking across sessions
 
-## Canonicalization
+Keystore protection:
 
-Canonicalization is entity-specific:
-
-- emails are normalized and case-folded
-- phone numbers keep an optional leading `+` and collapse to digits
-- names collapse whitespace and case-fold
-- IBAN and fiscal code values are normalized in uppercase
-
-This keeps token generation stable across equivalent surface forms.
-
-## Masked payloads
-
-The visible masked payload is also deterministic and keyed. It aims to preserve:
-
-- length
-- spacing
-- punctuation
-- broad alphanumeric shape
-
-The masked payload is not intended to be cryptographically reversible on its own. Reversal depends on the encrypted local map.
-
-## Placeholder integrity marker
-
-Current anonymization output uses a `P2` placeholder format with a short integrity marker:
-
-```text
-[[P2|TOKEN_ID|TAG|MASKED_VALUE]]
-```
-
-`TAG` is derived locally from the persistent root key, token id, and masked value. During restore, Persona checks that the placeholder:
-
-- is well formed
-- belongs to an expected token
-- matches the encrypted map entry
-- carries the expected integrity marker for current-format placeholders
-
-Legacy `P1` placeholders are still accepted for restore.
+- KDF: Argon2id
+- encryption: AES-256-GCM
 
 ## Encrypted map
 
-The encrypted map contains at least:
+The encrypted map still stores the sensitive reversible state.
 
-- format version
+At minimum it contains:
+
 - document metadata
-- document-binding metadata for original and censored files
+- binding metadata
 - token id
-- entity type
-- original value
-- masked value
-- logical location and offsets
+- optional block label
+- original block text
+- masked block text
+- placeholder
+- logical location / offsets
+- optional score / reason metadata from reviewable findings
 
 Map files are encrypted with:
 
 - Argon2id-derived key material
 - AES-256-GCM authenticated encryption
 
-## Strict restore
+## Block-oriented masking
 
-Restore now separates two concerns:
+The new model detects whole logical blocks, but masking remains deterministic and structural.
 
-- placeholder strictness
-- document binding policy
+Preserved as much as possible:
 
-Placeholder strictness remains always on:
+- length
+- spaces
+- punctuation
+- broad alpha/numeric shape
 
-- exact intact placeholders are restored
-- altered placeholders are not restored
-- altered placeholders are left in place
-- malformed, duplicate, and unexpected placeholders are left in place
-- structured issues and counts are emitted in the restore report
+This is useful for review and document readability, but it leaks some structural information about the original block. That tradeoff is unchanged from the prior design and remains intentional.
 
-Document binding has two modes:
+## Placeholder integrity
 
-- `pragmatic` is the default. Persona evaluates whether the supplied censored file is reasonably compatible with the encrypted map and may continue restore with warnings/issues when the match is weak.
-- `strict` requires strong compatibility. If the supplied file does not match the encrypted binding metadata closely enough, restore is refused before output is written.
+Current generated placeholders use:
 
-This avoids restoring text into placeholders that no longer match the encrypted map and reduces the risk of using the right map with the wrong censored file.
+```text
+[[P2|TOKEN_ID|TAG|MASKED_BLOCK]]
+```
 
-## Document binding metadata
+Where:
 
-When Persona writes a censored file, it re-opens that output through the same adapter and stores encrypted binding metadata including:
+- `TOKEN_ID` is stable and keyed
+- `TAG` is derived from local key material, token id, and masked block
 
-- exact file fingerprint
-- logical-content fingerprint derived from extracted segments
-- structural fingerprint derived from segment ids and container types
-- segment count
+Restore verifies:
+
+- placeholder shape
+- token presence in map
+- exact placeholder equality when expected
+- integrity tag for `P2`
+
+Legacy `P1` placeholders are still accepted for compatibility.
+
+## Document binding
+
+The recent hardening work remains in effect and now applies to the LLM-guided engine as well.
+
+The encrypted map stores binding metadata for both original and censored files, including:
+
 - file format
+- exact file hash
+- logical-content fingerprint
+- structural fingerprint
+- segment count
 
-During restore, the current file is fingerprinted again and compared with the encrypted binding metadata.
+Restore modes:
 
-Current policy notes:
+- `pragmatic`
+  - continue when binding is weak but still report issues
+- `strict`
+  - refuse restore before output when the file/map pair is not compatible enough
 
-- exact file fingerprint mismatch is reported explicitly
-- strong binding currently requires matching file format, logical fingerprint, structure fingerprint, and segment count
-- PDF binding is weaker in practice because it depends on best-effort text extraction
-- no Persona marker is currently embedded inside DOCX, XLSX, or PDF outputs
-- legacy maps without binding metadata remain usable only in `pragmatic` mode
+This binding is stronger than simple placeholder matching, but it is still not equivalent to a cryptographically signed in-file provenance marker.
 
-## Failure normalization
+## Local LLM backend considerations
 
-Keystore and map failures are normalized into domain errors for:
+Persona now depends on a local LLM runtime for detection quality.
+
+Important consequences:
+
+- detection quality depends on the local runtime and prompt adherence
+- malformed or ambiguous JSON from the local runtime is rejected by validation code
+- the model is not trusted to rewrite the source text
+- the model is not trusted to produce replacements or restore logic
+
+This keeps the LLM on the narrowest possible part of the trust boundary.
+
+## Web app considerations
+
+The local app introduces a browser surface but remains local-only.
+
+Current properties:
+
+- local FastAPI process
+- no remote calls by design in Persona itself
+- local JSON metadata storage
+- logical-text preview only
+
+Current limits:
+
+- no authentication layer inside the local app
+- no multi-user isolation
+- no CSRF/session hardening aimed at hostile local networks
+
+This is acceptable for a single-user localhost tool, but it is not a hardened multi-user desktop product.
+
+## Error handling
+
+Failure normalization remains important.
+
+Domain errors cover at least:
 
 - wrong password
-- malformed JSON
-- malformed encryption envelope
+- malformed keystore/map JSON
 - AES-GCM authentication failure
 - malformed decrypted payload
+- unsupported format
 - strict binding refusal
-- file/map compatibility failure in strict mode
+- invalid LLM output
+- local backend runtime failures
 
-## Non-goals in v1
+The intent is that users see clean operational errors rather than raw library stack traces.
 
-- OCR
-- secret sharing
-- centralized key management
-- tamper-proof endpoint security
-- advanced DLP policy engines
+## Remaining security limitations
+
+- no OCR
+- no secure deletion of originals/censored/restored files
+- no OS-native secret-store integration yet
+- no embedded Persona marker in output files yet
+- PDF support remains weaker for both fidelity and binding confidence
+- the app preview is extracted logical text, not a secure visual diff of the actual document layout

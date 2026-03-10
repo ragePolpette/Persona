@@ -69,6 +69,19 @@ class TextSegment:
     container_type: str
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "TextSegment":
+        return cls(
+            segment_id=payload["segment_id"],
+            location=payload["location"],
+            text=payload["text"],
+            container_type=payload["container_type"],
+            metadata=dict(payload.get("metadata", {})),
+        )
+
 
 @dataclass(slots=True)
 class DetectionMatch:
@@ -81,10 +94,35 @@ class DetectionMatch:
     end: int
     score: float
     context: str
+    reason: str = ""
     token_id: str = ""
     masked_value: str = ""
     placeholder: str = ""
     approved: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "DetectionMatch":
+        return cls(
+            match_id=payload["match_id"],
+            segment_id=payload["segment_id"],
+            location=payload["location"],
+            entity_type=payload["entity_type"],
+            original_value=payload["original_value"],
+            start=payload["start"],
+            end=payload["end"],
+            score=payload["score"],
+            context=payload["context"],
+            reason=payload.get("reason", ""),
+            token_id=payload.get("token_id", ""),
+            masked_value=payload.get("masked_value", ""),
+            placeholder=payload.get("placeholder", ""),
+            approved=payload.get("approved", True),
+            metadata=dict(payload.get("metadata", {})),
+        )
 
 
 @dataclass(slots=True)
@@ -98,13 +136,29 @@ class MapEntry:
     segment_id: str
     start: int
     end: int
+    score: float = 0.0
+    reason: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "MapEntry":
-        return cls(**payload)
+        return cls(
+            token_id=payload["token_id"],
+            entity_type=payload["entity_type"],
+            original_value=payload["original_value"],
+            masked_value=payload["masked_value"],
+            placeholder=payload["placeholder"],
+            location=payload["location"],
+            segment_id=payload["segment_id"],
+            start=payload["start"],
+            end=payload["end"],
+            score=payload.get("score", 0.0),
+            reason=payload.get("reason", ""),
+            metadata=dict(payload.get("metadata", {})),
+        )
 
 
 @dataclass(slots=True)

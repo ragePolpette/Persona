@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "persona"
 version = "0.1.0"
-description = "Offline CLI to anonymize sensitive data in DOCX, XLSX, and text-based PDF files."
+description = "Local/offline reversible document anonymization engine and app, guided by a local LLM."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -22,12 +22,16 @@ dependencies = [
   "openpyxl>=3.1,<4.0",
   "pdfplumber>=0.11,<1.0",
   "reportlab>=4.2,<5.0",
+  "fastapi>=0.116,<1.0",
+  "uvicorn>=0.35,<1.0",
+  "python-multipart>=0.0.20,<1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3,<9.0",
   "pytest-cov>=6.0,<7.0",
+  "httpx>=0.28,<1.0",
 ]
 
 [project.scripts]
@@ -43,4 +47,3 @@ include = ["persona*"]
 minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["."]
-
