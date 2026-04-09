@@ -1,5 +1,9 @@
 # Persona
 
+> [!IMPORTANT]
+> Work in progress.
+> Persona is an active prototype and portfolio project. The current repository shows the intended architecture and local workflow, but the product should not be read as a finished or production-ready document anonymization system.
+
 Persona is a local/offline application for reversible document anonymization, guided by a local LLM that identifies logically sensitive text blocks. A deterministic engine applies structural masking, stores an encrypted local map, and supports verifiable restore with document binding checks. Persona now includes both:
 
 - a reusable Python engine
@@ -240,3 +244,7 @@ Current coverage includes:
 
 - [docs/architecture.md](docs/architecture.md)
 - [docs/security.md](docs/security.md)
+
+## Development Process
+
+Built with AI-assisted workflows, while architecture, tradeoffs, integration, review, and validation were directed by the author.
