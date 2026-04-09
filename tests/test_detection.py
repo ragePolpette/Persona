@@ -17,7 +17,7 @@ def _build_test_model(tmp_path: Path) -> Path:
     ruler.add_patterns(
         [
             {"label": "PERSON", "pattern": "Mario Rossi"},
-            {"label": "ORG", "pattern": "Urgewalt"},
+            {"label": "ORG", "pattern": "Acme Labs"},
         ]
     )
     nlp.to_disk(model_path)
@@ -42,7 +42,7 @@ def test_local_detection_engine_detects_person_email_phone_and_optional_entities
             container_type="paragraph",
             text=(
                 "Mario Rossi can be reached at mario.rossi@example.com or +39 333 123 4567. "
-                "Company: Urgewalt. IBAN IT60X0542811101000000123456 and RSSMRA85M01H501Z."
+                "Company: Acme Labs. IBAN IT60X0542811101000000123456 and RSSMRA85M01H501Z."
             ),
         )
     ]
@@ -53,7 +53,7 @@ def test_local_detection_engine_detects_person_email_phone_and_optional_entities
     assert ("PERSON", "Mario Rossi") in values
     assert ("EMAIL_ADDRESS", "mario.rossi@example.com") in values
     assert ("PHONE_NUMBER", "+39 333 123 4567") in values
-    assert ("ORGANIZATION", "Urgewalt") in values
+    assert ("ORGANIZATION", "Acme Labs") in values
     assert ("IBAN", "IT60X0542811101000000123456") in values
     assert ("IT_FISCAL_CODE", "RSSMRA85M01H501Z") in values
 
