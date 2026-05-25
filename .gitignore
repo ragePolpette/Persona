@@ -13,3 +13,7 @@ htmlcov/
 .mypy_cache/
 .persona-test-home/
 
+
+# Local agent instruction files
+AGENTS.md
+CLAUDE.md
