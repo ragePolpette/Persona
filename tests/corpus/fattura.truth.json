@@ -1,0 +1,43 @@
+{
+  "sensitive": [
+    {
+      "text": "Tessitura Valdarno S.r.l.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Via Giuseppe Mazzini 14, 50123 Firenze (FI)",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "04123456784",
+      "kind": "PIVA"
+    },
+    {
+      "text": "Officine Meridiane S.p.A.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Corso Vittorio Emanuele II, 88 - 20122 Milano (MI)",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "01876543214",
+      "kind": "PIVA"
+    },
+    {
+      "text": "IT83X0306909606100000063456",
+      "kind": "IBAN"
+    }
+  ],
+  "glossary": [],
+  "keep": [
+    "FATTURA N. 2026/031",
+    "10/03/2026",
+    "€ 10.245,90",
+    "IVA 22%",
+    "€ 2.254,10",
+    "€ 12.500,00",
+    "09/04/2026",
+    "2026/0457"
+  ]
+}

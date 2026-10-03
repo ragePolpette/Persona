@@ -1,250 +1,74 @@
 # Persona
 
-> [!IMPORTANT]
-> Work in progress.
-> Persona is an active prototype and portfolio project. The current repository shows the intended architecture and local workflow, but the product should not be read as a finished or production-ready document anonymization system.
+Share documents with an AI without exposing the sensitive data of your clients, suppliers or anyone else, then bring the AI's output back to a usable document.
 
-Persona is a local/offline application for reversible document anonymization, guided by a local LLM that identifies logically sensitive text blocks. A deterministic engine applies structural masking, stores an encrypted local map, and supports verifiable restore with document binding checks. Persona now includes both:
-
-- a reusable Python engine
-- a minimal local web app for document upload, review, anonymization, and restore
-- a CLI that uses the same engine
-
-## Product direction
-
-Persona is no longer positioned primarily as a fixed-field PII detector.
-
-The main flow is:
-
-1. extract logical text from a local document
-2. ask a local LLM to identify sensitive text blocks
-3. review those blocks
-4. apply deterministic masking
-5. write a censored copy plus encrypted local map
-6. restore later with strict placeholder checks and document binding checks
-
-## Current architecture
-
-Main areas:
-
-```text
-persona/
-  adapters/      # DOCX/XLSX/PDF extraction and write-back
-  core/          # masking, placeholders, binding, restore primitives
-  engine/        # LLM-guided block detection, orchestration, local storage
-  review/        # CLI review fallback
-  security/      # keystore + encrypted map
-  web/           # local FastAPI web app
-  cli.py         # CLI entrypoints using the shared engine
-tests/
-docs/
+```
+document ──anonymize──▶ [PERSONA_1] signed with [AZIENDA_2] ──▶ AI ──▶ edited file ──restore──▶ usable document
+              │                                                                          ▲
+              └──────────── encrypted per-project vault (stays on your machine) ─────────┘
 ```
 
-## Supported formats
+> **Status: early rewrite.** The text engine and CLI work for `.txt` / `.md`. DOCX and XLSX adapters, a review UI and an optional local-LLM detector are next. See [Roadmap](#roadmap).
 
-- `.docx`
-- `.xlsx`
-- text-based `.pdf`
+## Quick start
 
-Explicitly not supported:
+```bash
+pip install -e ".[dev]"
 
-- `.doc`
-- `.xls`
-- OCR
-- image-based/scanned PDFs
-- cloud inference
-- external APIs
-- Electron
+persona init -p acme                                   # create the encrypted vault
+persona glossary add "Tessitura Valdarno S.r.l." -k AZIENDA -a Tessitura -p acme
+persona anonymize contract.md -p acme --dry-run        # see what would be masked
+persona anonymize contract.md -p acme                  # -> contract.anon.md (after a safety check)
 
-## Detection model
+# ...work on contract.anon.md with an AI, save its answer as answer.md...
 
-Detection is now block-oriented and LLM-guided.
-
-The local LLM is asked to return JSON findings shaped around spans such as:
-
-```json
-{
-  "findings": [
-    {
-      "start": 10,
-      "end": 32,
-      "text": "Alice Example",
-      "confidence": 0.93,
-      "label": "person",
-      "reason": "full identifying name"
-    }
-  ]
-}
+persona restore answer.md --sent contract.anon.md -p acme   # -> answer.restored.md
 ```
 
-Important constraints:
+The password is asked interactively, or read from `PERSONA_PASSWORD`. Vaults live in `~/.persona/projects/` (override with `PERSONA_HOME`).
 
-- the model only identifies sensitive blocks
-- it does not rewrite text
-- it does not invent placeholders
-- it does not perform masking
+## How it works
 
-Masking, encrypted map generation, restore, and binding are deterministic engine concerns.
+- **Short, readable placeholders** (`[PERSONA_1]`, `[AZIENDA_2]`, `[IBAN_1]`): the kind tells the AI what the thing is, so it can write around it naturally.
+- **One vault per project**: the same value is always the same placeholder, across all documents of a client. The vault is a single AES-256-GCM file (Argon2id key) holding the mapping and your glossary.
+- **Detection in layers**: your glossary (highest recall: you know your clients), checksum-validated identifiers (IBAN, codice fiscale, P.IVA, e-mail), phone numbers, and heuristics for titled names, company suffixes and street addresses. A value found once is masked everywhere, including in later documents of the project.
+- **Safety check before sharing**: the anonymized text is re-scanned for every known value and for anything the detectors still find. If something is left, the file is not written (`--force` overrides).
+- **Restore works on any text**, not on a specific file: the AI never returns the file you sent. Placeholders are matched tolerantly (case, brackets, markdown escapes like `\[PERSONA\_1\]`) and the report lists placeholders the AI **invented**, **dropped** or **altered**.
 
-## Local LLM backend
+Details and trade-offs: [docs/design.md](docs/design.md).
 
-Persona is model-agnostic through a small backend contract:
+## What it catches today
 
-- `analyze_chunk(text) -> findings`
+Measured on the synthetic Italian corpus in `tests/corpus` (8 documents, 76 sensitive values; run `pytest tests/test_corpus.py -s`):
 
-Concrete backends currently implemented:
+| | Without glossary | With glossary |
+|---|---|---|
+| E-mail, phone, IBAN, codice fiscale, P.IVA, addresses | 40/40 | 40/40 |
+| Companies | 13/15 | 15/15 |
+| People | 9/21 | 21/21 |
+| **Total** | **62/76** | **76/76** |
 
-- `qwen-ollama`
-- `qwen-llama-cpp`
-- `mock` for tests and contract validation
+The honest reading: structured data is solved; **names without a title and without a glossary entry are not detected** (e.g. a signature line `Elena Sorrentino`). That is the main gap, and why the glossary exists and why a NER / local-LLM layer is on the roadmap. A synthetic corpus written by the author is also optimistic; treat these numbers as a regression ratchet, not as a guarantee. **Always review before sending real data.**
 
-Default intended runtime is Qwen3-4B via a local runtime such as Ollama or llama.cpp.
+## Limits worth knowing
 
-Relevant environment variables:
+- Removing names does not remove identifiability from context ("the only supplier of X in Y").
+- If the AI derives new forms (`M. Rossi`, an e-mail built from a name) they are not in the vault and are not restored.
+- If the original text already contains something that looks like `[PERSONA_1]`, restore will treat it as a placeholder.
+- The same entity written in different ways (`ACME S.R.L.` / `Acme S.r.l.`) gets different placeholders, so restore gives back exactly what was written.
 
-- `PERSONA_LLM_BACKEND`
-- `PERSONA_LLM_MODEL`
-- `PERSONA_LLM_BASE_URL`
-- `PERSONA_LLM_CLI`
-- `PERSONA_LLM_MODEL_PATH`
-- `PERSONA_LLM_EXTRA_ARGS`
+## Roadmap
 
-Examples:
+1. DOCX and XLSX adapters that cover headers, footers, notes, comments and metadata (the old prototype leaked those).
+2. Review UI to approve/reject detections and add glossary entries on the spot.
+3. Optional local-LLM / NER detector for names (asked for text, never offsets), measured against the corpus.
+4. PDF input as extracted text; PDF output is out of scope.
 
-```powershell
-$env:PERSONA_LLM_BACKEND="qwen-ollama"
-$env:PERSONA_LLM_MODEL="qwen3:4b"
+## Development
+
+```bash
+pytest                        # 135 tests, <1 s
+pytest tests/test_corpus.py -s
 ```
 
-or:
-
-```powershell
-$env:PERSONA_LLM_BACKEND="qwen-llama-cpp"
-$env:PERSONA_LLM_MODEL_PATH="C:\models\Qwen3-4B.gguf"
-$env:PERSONA_LLM_CLI="C:\llama.cpp\llama-cli.exe"
-```
-
-## Local app
-
-Persona now includes a minimal local web app served on localhost.
-
-Workflow:
-
-- home page: list local documents and upload a new one
-- detail page: show original preview, anonymized preview, detected blocks, and review state
-- review actions: approve, reject, edit masked block
-- confirm anonymization
-- restore when censored file + map exist
-
-The web app uses local storage only. Default workspace:
-
-```text
-~/.persona/workspace/
-  originals/
-  censored/
-  maps/
-  restored/
-  metadata/
-```
-
-Metadata is stored as simple JSON files. No database is used.
-
-## CLI
-
-The CLI remains fully functional and uses the same engine as the web app.
-
-### Anonymize
-
-```powershell
-.\.venv\Scripts\python.exe -m persona.cli anonymize .\sample.docx --password-prompt --backend qwen-ollama --model-ref qwen3:4b
-```
-
-For contract/testing with the mock backend:
-
-```powershell
-$env:PERSONA_LLM_BACKEND="mock"
-.\.venv\Scripts\python.exe -m persona.cli anonymize .\sample.docx --password-prompt
-```
-
-### Restore
-
-```powershell
-.\.venv\Scripts\python.exe -m persona.cli restore .\sample.censored.docx --map .\sample.persona-map.json --password-prompt
-.\.venv\Scripts\python.exe -m persona.cli restore .\sample.censored.docx --map .\sample.persona-map.json --binding-mode strict --password-prompt
-```
-
-### Run local app
-
-```powershell
-.\.venv\Scripts\python.exe -m persona.cli app --backend qwen-ollama --model-ref qwen3:4b
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8765
-```
-
-## Deterministic masking and restore
-
-Persona still reuses the existing deterministic core:
-
-- stable token ids via keyed HMAC
-- structural masking preserving spaces, punctuation, and broad alphanumeric shape
-- encrypted local map with AES-256-GCM
-- Argon2id for password-based key derivation
-- strict placeholder validation during restore
-- document binding metadata for pragmatic/strict restore modes
-
-Placeholder format for current output:
-
-```text
-[[P2|TOKEN_ID|TAG|MASKED_BLOCK]]
-```
-
-Legacy `P1` placeholders and legacy maps remain supported where possible.
-
-## Legacy components
-
-The old Presidio/spaCy fixed-entity detector still exists in the repository as legacy support and test coverage, but it is no longer the product centerline. The primary path is now:
-
-- local LLM block detection
-- deterministic engine
-- local web app + CLI on top
-
-## Tests
-
-Run the full suite with:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-```
-
-Current coverage includes:
-
-- encrypted map / keystore / restore integrity paths
-- block-oriented LLM response parsing and validation
-- overlap resolution for multi-word blocks
-- engine anonymize + restore with mock backend
-- local web app upload/review/anonymize flow
-- DOCX/XLSX/PDF adapters
-- binding pragmatic vs strict
-
-## Known limitations
-
-- PDF remains best-effort and is the weakest format both for layout fidelity and binding strength
-- the web app preview is logical-text preview, not faithful visual rendering of DOCX/XLSX/PDF layouts
-- Qwen runtime integration is implemented architecturally, but real execution depends on the user’s local runtime setup
-- no OCR
-- no image/textbox/header/footer handling
-- no formulas rewrite in Excel
-- no embedded in-file Persona marker yet
-
-## More detail
-
-- [docs/architecture.md](docs/architecture.md)
-- [docs/security.md](docs/security.md)
-
-## Development Process
-
-Built with AI-assisted workflows, while architecture, tradeoffs, integration, review, and validation were directed by the author.
+Built with AI-assisted workflows; design decisions and review by the author.

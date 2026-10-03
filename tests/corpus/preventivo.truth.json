@@ -1,0 +1,53 @@
+{
+  "sensitive": [
+    {
+      "text": "Bianchi Logistica S.n.c.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Piazza della Repubblica 5, 10121 Torino",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "02765432105",
+      "kind": "PIVA"
+    },
+    {
+      "text": "Paolo Bianchi",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Tessitura Valdarno S.r.l.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Via Giuseppe Mazzini 14, 50123 Firenze",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "Giulia Marchetti",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "055 1234567",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "giulia.marchetti@tessituravaldarno.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "IT83 X030 6909 6061 0000 0063 456",
+      "kind": "IBAN"
+    }
+  ],
+  "glossary": [],
+  "keep": [
+    "PREVENTIVO N. 118/2026",
+    "€ 3.200,00",
+    "€ 450,00",
+    "€ 3.650,00",
+    "60 giorni",
+    "30 giorni"
+  ]
+}

@@ -1,0 +1,18 @@
+PREVENTIVO N. 118/2026
+
+Spett.le Bianchi Logistica S.n.c.
+Piazza della Repubblica 5, 10121 Torino
+P.IVA 02765432105
+
+Alla c.a. del Sig. Paolo Bianchi
+
+Da: Tessitura Valdarno S.r.l. - Via Giuseppe Mazzini 14, 50123 Firenze
+Referente: Dott.ssa Giulia Marchetti, tel. 055 1234567, giulia.marchetti@tessituravaldarno.example
+
+Descrizione                      Importo
+Fornitura teli antipolvere       € 3.200,00
+Trasporto                        € 450,00
+Totale                           € 3.650,00
+
+Validità offerta: 60 giorni.
+Pagamento: bonifico a 30 giorni su IBAN IT83 X030 6909 6061 0000 0063 456

@@ -1,0 +1,62 @@
+{
+  "sensitive": [
+    {
+      "text": "Giulia",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Roberto",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "338 4567890",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "02 7654321",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "ufficio.acquisti@officinemeridiane.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "Elena Sorrentino",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Officine Meridiane S.p.A.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Corso Vittorio Emanuele II, 88 - 20122 Milano",
+      "kind": "INDIRIZZO"
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Giulia Marchetti",
+      "kind": "PERSONA",
+      "aliases": [
+        "Giulia"
+      ]
+    },
+    {
+      "term": "Roberto Ferrante",
+      "kind": "PERSONA",
+      "aliases": [
+        "Roberto"
+      ]
+    },
+    {
+      "term": "Elena Sorrentino",
+      "kind": "PERSONA",
+      "aliases": []
+    }
+  ],
+  "keep": [
+    "2026/0457",
+    "15/03/2026",
+    "una settimana"
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "sensitive": [
+    {
+      "text": "Officine Meridiane S.p.A.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Roberto Ferrante",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Cooperativa Il Girasole",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Paolo",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "345 6677889",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "Giulia Marchetti",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Tessitura Valdarno S.r.l.",
+      "kind": "AZIENDA"
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Cooperativa Il Girasole",
+      "kind": "AZIENDA",
+      "aliases": []
+    },
+    {
+      "term": "Giulia Marchetti",
+      "kind": "PERSONA",
+      "aliases": []
+    },
+    {
+      "term": "Paolo Bianchi",
+      "kind": "PERSONA",
+      "aliases": [
+        "Paolo"
+      ]
+    }
+  ],
+  "keep": [
+    "Progetto Aurora",
+    "30 a 60 giorni",
+    "5.000 metri/anno",
+    "18%",
+    "€ 150.000,00",
+    "Regolamento UE 2016/679"
+  ]
+}
