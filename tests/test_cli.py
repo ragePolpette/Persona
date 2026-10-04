@@ -82,7 +82,7 @@ def test_glossary_via_cli(tmp_path: Path) -> None:
 
 
 def test_clean_errors(tmp_path: Path) -> None:
-    docx = tmp_path / "a.xlsx"
+    docx = tmp_path / "a.doc"
     docx.write_bytes(b"PK")
     run("init", "-p", "e")
     unsupported = run("anonymize", str(docx), "-p", "e")

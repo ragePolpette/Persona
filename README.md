@@ -8,7 +8,7 @@ document ──anonymize──▶ [PERSONA_1] signed with [AZIENDA_2] ──▶ 
               └──────────── encrypted per-project vault (stays on your machine) ─────────┘
 ```
 
-> **Status: early rewrite.** The engine and CLI work for `.docx`, `.txt`, `.md` and text-based `.pdf` (read as extracted text). XLSX, a review UI and an optional local-LLM detector are next.
+> **Status: early rewrite.** The engine and CLI work for `.docx`, `.xlsx`, `.txt`, `.md` and text-based `.pdf` (read as extracted text). A review UI and an optional local-LLM detector are next.
 
 ## Quick start
 
@@ -21,6 +21,7 @@ persona anonymize contract.md -p acme --dry-run        # see what would be maske
 persona anonymize contract.md -p acme                  # -> contract.anon.md (after a safety check)
 
 persona anonymize offer.docx -p acme                   # -> offer.anon.docx, formatting kept
+persona anonymize clients.xlsx -p acme                 # -> clients.anon.xlsx, sheets/formulas kept consistent
 persona anonymize cv.pdf -p acme                       # PDFs are read as text -> cv.anon.txt
 
 # ...work on contract.anon.md with an AI, save its answer as answer.md...
@@ -37,6 +38,7 @@ The password is asked interactively, or read from `PERSONA_PASSWORD`. Vaults liv
 - **Detection in layers**: your glossary (highest recall: you know your clients), checksum-validated identifiers (IBAN, codice fiscale, P.IVA, e-mail), phone numbers, profile/web URLs, and heuristics for names (titles, a list of common Italian first names, labels like `Cognome:`, names hidden in e-mail addresses and profile URLs), company suffixes, institutions (`Liceo …`, `Cooperativa …`) and street addresses. A value found once is masked everywhere, including in later documents of the project.
 - **Safety check before sharing**: the file that was actually written is re-opened and re-scanned for every known value and for anything the detectors still find. If something is left, nothing is written (`--force` overrides).
 - **DOCX goes deep**: body, tables, headers, footers, footnotes/endnotes, comments, text boxes, tracked deletions, field codes (`HYPERLINK "mailto:…"`), hyperlink targets, image alt text, custom XML and document properties are all analysed. Formatting is kept: a placeholder inherits the run it starts in, even when the name was split across differently formatted runs. Who-made-the-file traces are scrubbed: author / last-modified-by / company, comment and revision authors, the page thumbnail and the people list. Scrubbed fields are not restored.
+- **XLSX goes deep too**: shared and inline strings (rich text included), formulas, cached results, **sheet names** and defined names (renamed consistently, bracket-less `AZIENDA_1` because Excel forbids `[ ]` in sheet names; formulas pointing at them are updated the same way), hyperlinks, headers/footers, validation texts, legacy and threaded comments, table column names, document properties. Numbers stay numbers; layout, charts and styles are untouched because only text nodes are edited. Phonetic guides of masked strings are dropped (they would reveal the original).
 - **Restore works on any text**, not on a specific file: the AI never returns the file you sent. Placeholders are matched tolerantly (case, brackets, markdown escapes like `\[PERSONA\_1\]`) and the report lists placeholders the AI **invented**, **dropped** or **altered**.
 
 Details and trade-offs: [docs/design.md](docs/design.md).
@@ -58,24 +60,24 @@ Reality check on one real two-page PDF CV (not committed): address, phone, e-mai
 
 ## Limits worth knowing
 
-- **Text inside images, charts, SmartArt and embedded objects is not anonymized.** Persona warns when a DOCX contains them; check them by hand.
+- **Text inside images, charts, SmartArt, pivot tables, drawings/shapes, external links, data connections and macros is not anonymized.** Persona warns when a DOCX/XLSX contains them; check them by hand.
+- **Identifiers stored as numbers** in a spreadsheet (a phone or P.IVA typed as `3384567890`) cannot be detected as text. Persona warns with the cells; mask them by hand.
 - Removing names does not remove identifiability from context ("the only supplier of X in Y").
 - If the AI derives new forms (`M. Rossi`, an e-mail built from a name) they are not in the vault and are not restored.
 - If the original text already contains something that looks like `[PERSONA_1]`, restore will treat it as a placeholder.
 - The same entity written in different ways (`ACME S.R.L.` / `Acme S.r.l.`) gets different placeholders, so restore gives back exactly what was written.
-- DOCX output was checked with python-docx, XML well-formedness and zip integrity, not with Word itself: open the result in Word once before relying on it.
+- DOCX/XLSX output was checked with python-docx / openpyxl, XML well-formedness and zip integrity, not with Word or Excel themselves: open the result once before relying on it.
 
 ## Roadmap
 
-1. XLSX adapter (cells, sheet names, comments, properties), same safety checks as DOCX.
-2. Review UI to approve/reject detections and add glossary entries on the spot.
-3. Optional local-LLM / NER detector for names (asked for text, never offsets), measured against the corpus.
-4. OCR for scanned PDFs and images (PDF *output* stays out of scope: the AI never needs a PDF back).
+1. Review UI to approve/reject detections and add glossary entries on the spot.
+2. Optional local-LLM / NER detector for names (asked for text, never offsets), measured against the corpus.
+3. OCR for scanned PDFs and images (PDF *output* stays out of scope: the AI never needs a PDF back).
 
 ## Development
 
 ```bash
-pytest                        # 170 tests, ~2 s
+pytest                        # 181 tests, ~2 s
 pytest tests/test_corpus.py -s
 ```
 
