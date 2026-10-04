@@ -97,6 +97,48 @@ def test_addresses() -> None:
     assert [k for k, _ in found("ti scrivo via email")] == []
 
 
-def test_known_gap_names_without_title_are_not_detected() -> None:
+def test_known_first_name_plus_surname_without_title() -> None:
+    assert ("PERSONA", "Giulia Marchetti") in found("Ne ha parlato Giulia Marchetti con Roberto.")
+    assert ("PERSONA", "Maria Chiara De Luca") in found("Firmato Maria Chiara De Luca ieri")
+    assert ("PERSONA", "Mario Rossi") in found("Mario Rossi Luca Bianchi")
+    assert ("PERSONA", "Luca Bianchi") in found("Mario Rossi Luca Bianchi")
+
+
+def test_names_not_in_the_first_name_list_or_alone_are_a_known_gap() -> None:
     # Documented limitation: this is what the glossary exists for.
-    assert [k for k, _ in found("Ne ha parlato Giulia Marchetti con Roberto.")] == []
+    assert [k for k, _ in found("Ne ha parlato Giulia con Roberto.")] == []
+    assert [k for k, _ in found("Ne ha parlato Zeno Cosini.")] == []
+    assert [k for k, _ in found("Progetto Aurora e la rosa rossa")] == []
+
+
+def test_labeled_names_on_forms() -> None:
+    assert ("PERSONA", "Chiara") in found("Nome: Chiara\nCognome: De Luca")
+    assert ("PERSONA", "De Luca") in found("Nome: Chiara\nCognome: De Luca")
+    assert ("PERSONA", "Giulia Marchetti") in found("Referente: Dott.ssa Giulia Marchetti, tel.")
+
+
+def test_labeled_name_does_not_swallow_a_title_left_before_a_placeholder() -> None:
+    assert found("Referente: Dott.ssa [PERSONA_2], tel.") == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["linkedin.com/in/mario-rossi", "github.com/zeno-dev", "https://www.acme.example/chi-siamo", "www.acme.example"],
+)
+def test_urls(url: str) -> None:
+    assert ("URL", url) in found(f"Profilo: {url}.")
+
+
+def test_technology_names_and_filenames_are_not_urls() -> None:
+    assert [k for k, _ in found("Stack: Node.js, Vue.js, ASP.NET, report.xlsx, e.g. SQL")] == []
+
+
+def test_via_followed_by_an_acronym_is_not_an_address() -> None:
+    assert found("Ho integrato via API e via MCP con il server") == []
+
+
+def test_institutions_without_a_legal_suffix() -> None:
+    assert ("AZIENDA", "Liceo Scientifico Esedra") in found("Diploma: Liceo Scientifico Esedra – Lucca")
+    assert ("AZIENDA", "Cooperativa Il Girasole") in found("ritardi su Cooperativa Il Girasole, il nostro")
+    assert ("AZIENDA", "Studio Legale Caruso & Associati") in found("Studio Legale Caruso & Associati\nVia")
+    assert [k for k, _ in found("Ho fatto uno studio sulla scuola")] == []

@@ -52,6 +52,10 @@ class FoldedText:
         return hits
 
 
+def fold(text: str) -> str:
+    return FoldedText(text).folded
+
+
 def _is_whole_word(text: str, start: int, end: int) -> bool:
     if text[start].isalnum() and start > 0 and _is_word_char(text[start - 1]):
         return False

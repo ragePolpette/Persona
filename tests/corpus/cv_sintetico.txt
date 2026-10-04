@@ -1,0 +1,27 @@
+Via Garibaldi 12 – 37121 Verona (VR)
+Davide Lombardi +39 347 55 66 778
+davide.lombardi@example.test
+linkedin.com/in/davide-lombardi
+Analista programmatore
+PROFILO
+Analista programmatore con 6 anni di esperienza su Python, Node.js e PostgreSQL. Approccio pratico, attenzione alla manutenibilità e alla documentazione.
+ESPERIENZA
+Officine Digitali Veronesi – Verona 2019 – presente
+Sviluppatore Python
+• Sviluppato API REST con FastAPI per il gestionale interno
+• Integrato la fatturazione elettronica (SDI) con gestione degli stati
+• Ottimizzato query PostgreSQL su tabelle di grandi dimensioni
+Cantiere Web Studio – Padova 2016 – 2019
+Sviluppatore web
+• Realizzato siti e portali con Vue.js e Node.js
+• Gestito il rilascio su server Linux
+PROGETTI PERSONALI
+github.com/dlombardi-dev
+Rilevatore di dati personali in documenti, con pipeline NER e regole
+FORMAZIONE
+Istituto Tecnico Marconi – Verona
+Diploma di perito informatico
+REFERENZE
+Prof.ssa Elisa Moretti, Università di Verona (elisa.moretti@univr.example)
+LINGUE E INTERESSI
+Italiano (madrelingua) · Inglese (buono) · Fotografia · Ciclismo

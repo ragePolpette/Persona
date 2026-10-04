@@ -22,8 +22,9 @@ segments ─▶ detectors ─▶ propagate ─▶ resolve overlaps ─▶ (revie
 ```
 
 - **Segments** are named strings (a paragraph, a cell, a whole .md file), so file adapters can plug in without touching the engine.
-- **Detectors** (`persona/detect`): glossary; validated identifiers (IBAN mod-97, codice fiscale and P.IVA checksums, e-mail); phones; heuristics (titled names, company suffixes, street addresses). Labeled values (`C.F. …`, `P.IVA …`) are masked even with a wrong checksum, because a typo must not become a leak.
+- **Detectors** (`persona/detect`): glossary; validated identifiers (IBAN mod-97, codice fiscale and P.IVA checksums, e-mail); phones; profile/web URLs; heuristics (titled names, known first name + capitalised surname, `Nome:`/`Cognome:` labels, company suffixes, institutions such as `Liceo …`, street addresses). Labeled values (`C.F. …`, `P.IVA …`) are masked even with a wrong checksum, because a typo must not become a leak.
 - **Propagation**: every detected value, plus every value in the vault, is searched across all segments (case/accent-insensitive, whole word). Bare surnames/first names of detected people ("Rossi" after "Mario Rossi") are masked case-sensitively, so "verdi" (green) survives "Anna Verdi".
+- **Names hidden in handles**: `zeno.cosini@…` or `linkedin.com/in/zeno-cosini` reveal that `Zeno` and `Cosini` are names, so they are masked wherever they appear capitalised; adjacent name parts are merged into one `PERSONA` block. Generic mailbox words (`ufficio`, `info`, `amministrazione`…) are excluded.
 - **Overlaps**: highest priority wins (validated > glossary > known value > pattern > heuristic > alias), then longest. A loser is not discarded: the part the winner does not cover is kept (trimmed of connectors), so a greedy heuristic match can never hide a value behind a neighbour. This fixed a real leak found with the corpus (`Giulia Marchetti di Tessitura Valdarno S.r.l.`).
 - **Apply** registers values in the vault and replaces approved spans; the caller saves the vault.
 - **Review** is `Span.approved`: the engine already supports rejecting detections; the UI is to come.
@@ -36,7 +37,9 @@ Identity of an entry is the **exact surface string**. `ACME S.R.L.` and `Acme S.
 
 ## Known gaps (tracked by tests or the roadmap)
 
-- Names without a title or glossary entry are not detected by rules (`test_known_gap_names_without_title_are_not_detected`, corpus recall without glossary).
-- Companies without a legal suffix (`Studio Legale Caruso & Associati`, `Cooperativa Il Girasole`) need the glossary.
-- No adapters yet for DOCX/XLSX/PDF. The previous prototype ignored headers, footers and document properties; the new adapters must include them and `verify` must run over all of it.
+- Names outside the first-name list, or a lone first name, are not detected by rules (`test_names_not_in_the_first_name_list_or_alone_are_a_known_gap`).
+- Companies/institutions without a legal suffix or known keyword (`Officine Digitali Veronesi`, `Studioboost`) need the glossary.
+- The first-name list is a hand-written gazetteer of ~350 common Italian names: it will miss rarer or foreign names.
+- Cities are not masked, even though a city plus an employer can identify someone.
+- PDFs are read as extracted text (single-column works well; multi-column order depends on the PDF); scanned PDFs are rejected (no OCR). No adapters yet for DOCX/XLSX. The previous prototype ignored headers, footers and document properties; the new adapters must include them and `verify` must run over all of it.
 - Original text that looks like a placeholder is ambiguous on restore.

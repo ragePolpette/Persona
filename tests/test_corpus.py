@@ -20,7 +20,7 @@ from persona.vault import Vault
 from tests.conftest import CorpusDoc, FAST_KDF, load_corpus
 
 CORPUS = load_corpus()
-STRUCTURED = {"EMAIL", "TELEFONO", "IBAN", "CF", "PIVA", "INDIRIZZO"}
+STRUCTURED = {"EMAIL", "TELEFONO", "IBAN", "CF", "PIVA", "INDIRIZZO", "URL"}
 
 
 def _vault(tmp_path, doc: CorpusDoc, *, glossary: bool) -> Vault:
@@ -47,7 +47,7 @@ def _recall(tmp_path, *, glossary: bool) -> tuple[dict[str, list[int]], list[tup
 
 
 def test_corpus_is_well_formed() -> None:
-    assert len(CORPUS) >= 8
+    assert len(CORPUS) >= 9
     for doc in CORPUS:
         for item in doc.sensitive:
             assert item["text"] in doc.text, (doc.name, item["text"])
@@ -64,7 +64,7 @@ def test_recall_without_glossary(tmp_path, capsys) -> None:
         hit, total = per_kind[kind]
         assert hit == total, f"{kind}: {hit}/{total} (missed: {[m for m in missed]})"
     overall = sum(hit for hit, _ in per_kind.values()), sum(total for _, total in per_kind.values())
-    assert overall[0] >= 62, f"overall recall regressed: {overall}"  # ratchet: 62/76 today
+    assert overall[0] >= 83, f"overall recall regressed: {overall}"  # ratchet: 83/88 today
 
 
 def test_recall_with_glossary_is_complete(tmp_path) -> None:

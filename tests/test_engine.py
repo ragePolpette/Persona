@@ -86,3 +86,20 @@ def test_identical_values_share_one_placeholder_and_restore_exactly(vault: Vault
     censored, result = anonymize_text(text, vault)
     assert result.placeholders["[PERSONA_1]"] == 3
     assert restore_text(censored, vault).text == text
+
+
+def test_names_are_derived_from_email_addresses_and_urls(vault: Vault) -> None:
+    text = "Zeno Cosini\nzeno.cosini@example.test\nlinkedin.com/in/zeno-cosini\nPoi COSINI ha scritto."
+    censored, _ = anonymize_text(text, vault)
+    assert "Cosini" not in censored and "COSINI" not in censored and "Zeno" not in censored
+    assert verify({"t": censored}, vault) == []
+
+
+def test_generic_mailbox_names_are_not_treated_as_people(vault: Vault) -> None:
+    censored, _ = anonymize_text("Scrivere a ufficio.acquisti@example.test. Ufficio acquisti risponde.", vault)
+    assert "Ufficio acquisti" in censored
+
+
+def test_adjacent_name_parts_become_one_person(vault: Vault) -> None:
+    censored, _ = anonymize_text("Zeno Cosini\nzeno.cosini@example.test", vault)
+    assert censored.splitlines()[0] == "[PERSONA_1]"

@@ -82,11 +82,11 @@ def test_glossary_via_cli(tmp_path: Path) -> None:
 
 
 def test_clean_errors(tmp_path: Path) -> None:
-    pdf = tmp_path / "a.pdf"
-    pdf.write_bytes(b"%PDF")
+    docx = tmp_path / "a.docx"
+    docx.write_bytes(b"PK")
     run("init", "-p", "e")
-    unsupported = run("anonymize", str(pdf), "-p", "e")
+    unsupported = run("anonymize", str(docx), "-p", "e")
     assert unsupported.exit_code == 1 and "Unsupported file type" in unsupported.output
-    assert run("anonymize", str(pdf)).exit_code == 1  # no project
+    assert run("anonymize", str(docx)).exit_code == 1  # no project
     missing = run("init", "-p", "e")  # already exists
     assert missing.exit_code == 1 and "already exists" in missing.output

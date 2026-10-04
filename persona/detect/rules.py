@@ -16,6 +16,7 @@ from persona.detect.base import (
     PRIORITY_VALIDATED,
     Span,
 )
+from persona.detect.names import is_first_name
 from persona.detect.validators import IBAN_LENGTHS, is_valid_cf, is_valid_iban, is_valid_piva
 
 _UP = "A-ZÀ-ÖØ-Þ"
@@ -58,6 +59,14 @@ _TITLE = (
 _PERSON_WITH_TITLE = re.compile(
     rf"(?<![\w]){_TITLE}[ \t]+(?P<name>{_NAME_WORD}(?:[ \t]+{_NAME_WORD}){{0,2}})"
 )
+_CAPITALISED_CHAINS = re.compile(
+    rf"(?<![\w])[{_UP}][{_UP}{_LOW}'’\-]+(?:[ \t]+(?:(?:de|di|da|del|della|lo|la|van|von)[ \t]+)?[{_UP}][{_UP}{_LOW}'’\-]+)+"
+)
+_SURNAME_PARTICLES = {"de", "di", "da", "del", "della", "dei", "degli", "lo", "la", "van", "von"}
+_NOT_SURNAMES = {
+    "il", "lo", "la", "le", "gli", "un", "una", "con", "per", "tra", "fra", "che", "del", "della",
+    "dei", "delle", "srl", "spa", "snc", "sas", "s.r.l.", "s.p.a.", "ha", "è",
+}  # fmt: skip
 _NAME_TRAILING_STOP = {
     "via", "viale", "piazza", "corso", "largo", "strada", "tel", "email", "cod", "cf", "piva",
     "spett", "nato", "nata", "residente", "domiciliato", "domiciliata",
@@ -86,15 +95,43 @@ _STREET_TYPE = (
 )
 _STREET_CONNECTOR = r"(?:(?:di|del|della|dei|degli|delle|dello|da|de|la|lo|il)[ \t]+|dell['’]|d['’])"
 _STREET_WORD = rf"[{_UP}][\w{_UP}{_LOW}'’\-]+"
+_STREET_FIRST_WORD = rf"[{_UP}][{_LOW}'’\-][\w{_UP}{_LOW}'’\-]*"
 _STREET_NUMBER = r"(?:,?[ \t]*(?:n\.?°?[ \t]*|civ\.?[ \t]*)?\d{1,4}[ \t]?[A-Za-z]?(?:/[A-Za-z0-9]+)?)"
 _CAP_CITY = (
     rf"(?:[ \t]*[,\-–]?[ \t]*\d{{5}}[ \t]+[{_UP}][\w{_LOW}'’\-]+(?:[ \t]+[{_UP}][\w{_LOW}'’\-]+){{0,2}}"
     rf"(?:[ \t]*\([A-Z]{{2}}\))?)"
 )
 _ADDRESS = re.compile(
-    rf"(?<![\w]){_STREET_TYPE}[ \t]+(?:{_STREET_CONNECTOR})*{_STREET_WORD}"
+    rf"(?<![\w]){_STREET_TYPE}[ \t]+(?:{_STREET_CONNECTOR})*{_STREET_FIRST_WORD}"
     rf"(?:[ \t]+(?:{_STREET_CONNECTOR})*{_STREET_WORD}){{0,3}}{_STREET_NUMBER}?{_CAP_CITY}?"
 )
+
+_PROFILE_HOSTS = (
+    r"linkedin\.com|github\.com|gitlab\.com|bitbucket\.org|twitter\.com|x\.com|facebook\.com|"
+    r"instagram\.com|tiktok\.com|youtube\.com|t\.me"
+)
+_URL = re.compile(
+    rf"(?<![\w@.])(?:(?:https?://|www\.)[^\s<>()\[\]]+|(?:[a-z]{{2,3}}\.)?(?:{_PROFILE_HOSTS})/[^\s<>()\[\]]+)",
+    re.IGNORECASE,
+)
+
+_NAME_LABEL = re.compile(
+    rf"(?i:\b(?:Nome|Cognome|Nominativo|Referente|Intestatario|Intestataria|Titolare|Firmatario|"
+    rf"Legale\s+rappresentante)\s*:[ \t]*)(?:{_TITLE}[ \t]+)?"
+    rf"(?!{_TITLE})(?P<name>{_NAME_WORD}(?:[ \t]+{_NAME_WORD}){{0,2}})"
+)
+
+_INSTITUTION = (
+    r"(?:Liceo|Istituto|Università|Universita|Politecnico|Scuola|Fondazione|Associazione|Cooperativa|"
+    r"Consorzio|Studio[ \t]+Legale|Studio[ \t]+Associato|Studio[ \t]+Notarile|Ospedale|Comune[ \t]+di|"
+    r"Banca|Hotel|Ristorante|Azienda[ \t]+Agricola|Società[ \t]+Agricola|Ditta)"
+)
+_INSTITUTION_WORD = rf"(?:[{_UP}][\w{_UP}{_LOW}'’.\-]*|(?:di|del|della|dei|degli|delle|e|ed|&|de)(?![\w]))"
+_INSTITUTION_NAME = re.compile(
+    rf"(?<![\w]){_INSTITUTION}(?:[ \t]+{_INSTITUTION_WORD}){{1,5}}(?<![ \t])"
+)
+
+_GENERIC_CAP_WORDS = {"srl", "spa", "snc", "sas"}
 
 
 class RuleDetector:
@@ -106,8 +143,12 @@ class RuleDetector:
             self._codici_fiscali,
             self._partite_iva,
             self._phones,
+            self._urls,
             self._people,
+            self._people_by_first_name,
+            self._labeled_names,
             self._companies,
+            self._institutions,
             self._addresses,
         ):
             spans.extend(finder(text))
@@ -183,6 +224,52 @@ class RuleDetector:
                 continue
             end = start + words[-1].end()
             yield _span(start, end, "PERSONA", text, "rules:title-name", PRIORITY_HEURISTIC)
+
+    def _urls(self, text: str) -> Iterator[Span]:
+        for match in _URL.finditer(text):
+            end = match.end()
+            while end > match.start() and text[end - 1] in ".,;:!?\"'":
+                end -= 1
+            yield _span(match.start(), end, "URL", text, "rules:url", PRIORITY_PATTERN + 10)
+
+    def _labeled_names(self, text: str) -> Iterator[Span]:
+        for match in _NAME_LABEL.finditer(text):
+            start, end = match.start("name"), match.end("name")
+            yield _span(start, end, "PERSONA", text, "rules:labeled-name", PRIORITY_HEURISTIC)
+
+    def _people_by_first_name(self, text: str) -> Iterator[Span]:
+        """"Mario Rossi", "Maria Chiara De Luca": a known first name followed by capitalised words."""
+        for chain in _CAPITALISED_CHAINS.finditer(text):
+            words = list(re.finditer(r"\S+", chain.group(0)))
+            index = 0
+            while index < len(words):
+                word = words[index].group(0)
+                if not (word[0].isupper() and is_first_name(word)):
+                    index += 1
+                    continue
+                taken = 1
+                has_surname = False
+                while index + taken < len(words) and taken < 4:
+                    following = words[index + taken].group(0)
+                    bare = following.lower().strip(".,")
+                    if bare in _NAME_TRAILING_STOP or bare in _NOT_SURNAMES:
+                        break
+                    after_particle = words[index + taken - 1].group(0).lower() in _SURNAME_PARTICLES
+                    if is_first_name(following) and following[0].isupper() and not after_particle:
+                        if has_surname:
+                            break
+                    else:
+                        has_surname = True
+                    taken += 1
+                if taken >= 2 and has_surname:
+                    start = chain.start() + words[index].start()
+                    end = chain.start() + words[index + taken - 1].end()
+                    yield _span(start, end, "PERSONA", text, "rules:first-name", PRIORITY_HEURISTIC)
+                index += max(taken, 1)
+
+    def _institutions(self, text: str) -> Iterator[Span]:
+        for match in _INSTITUTION_NAME.finditer(text):
+            yield _span(match.start(), match.end(), "AZIENDA", text, "rules:institution", PRIORITY_HEURISTIC)
 
     def _companies(self, text: str) -> Iterator[Span]:
         for match in _COMPANY.finditer(text):

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-KINDS = ("PERSONA", "AZIENDA", "EMAIL", "TELEFONO", "IBAN", "CF", "PIVA", "INDIRIZZO", "ALTRO")
+KINDS = ("PERSONA", "AZIENDA", "EMAIL", "TELEFONO", "IBAN", "CF", "PIVA", "INDIRIZZO", "URL", "ALTRO")
 
 
 def format_placeholder(kind: str, number: int) -> str:

@@ -11,6 +11,7 @@ import typer
 from persona.engine import Segment, analyze, apply, verify
 from persona.exceptions import InputError, PersonaError
 from persona.placeholders import KINDS
+from persona.readers import output_suffix, read_document
 from persona.restore import placeholders_in, restore_text
 from persona.vault import Vault
 
@@ -21,8 +22,6 @@ app = typer.Typer(
 )
 glossary_app = typer.Typer(no_args_is_help=True, help="Names to always mask in a project.")
 app.add_typer(glossary_app, name="glossary")
-
-SUPPORTED_SUFFIXES = (".txt", ".md")
 
 ProjectOption = typer.Option(None, "--project", "-p", help="Project name (vault in ~/.persona/projects).")
 VaultOption = typer.Option(None, "--vault", help="Explicit vault path (overrides --project).")
@@ -51,15 +50,7 @@ def _open(project: Optional[str], vault: Optional[Path]) -> Vault:
     return Vault.open(_vault_path(project, vault), _password())
 
 
-def _read(path: Path) -> str:
-    if path.suffix.lower() not in SUPPORTED_SUFFIXES:
-        raise InputError(
-            f"Unsupported file type '{path.suffix}'. For now: {', '.join(SUPPORTED_SUFFIXES)} (DOCX/XLSX coming)."
-        )
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise InputError(f"Cannot read {path}: {exc}") from exc
+_read = read_document
 
 
 def _guard(action):
@@ -111,7 +102,7 @@ def glossary_list(project: Optional[str] = ProjectOption, vault: Optional[Path] 
 @_guard
 def anonymize(
     file: Path = typer.Argument(..., exists=True, dir_okay=False),
-    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Default: <name>.anon<ext>"),
+    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Default: <name>.anon.<ext> (.txt for PDFs)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Only show what would be masked."),
     force: bool = typer.Option(False, "--force", help="Write the file even if the safety check finds leaks."),
     project: Optional[str] = ProjectOption,
@@ -141,7 +132,7 @@ def anonymize(
         typer.echo("Add the names to the glossary (persona glossary add) and retry, or use --force.", err=True)
         raise typer.Exit(code=2)
 
-    target = out or file.with_name(f"{file.stem}.anon{file.suffix}")
+    target = out or file.with_name(f"{file.stem}.anon{output_suffix(file)}")
     target.write_text(censored, encoding="utf-8")
     opened.save()
     typer.echo(f"Written: {target}  ({sum(result.placeholders.values())} masked, {len(result.placeholders)} distinct)")

@@ -97,7 +97,8 @@ def analyze(
 
     spans: list[Span] = []
     for segment in segment_list:
-        spans.extend(resolve_overlaps(per_segment[segment.id]))
+        resolved = resolve_overlaps(per_segment[segment.id])
+        spans.extend(_merge_adjacent_people(resolved, segment.text))
     return Analysis(segments=segment_list, spans=spans)
 
 
@@ -173,10 +174,18 @@ def _known_values(
 
 
 def _person_aliases(per_segment: Mapping[str, list[Span]]) -> set[str]:
-    """Bare first/last names of detected people ("Rossi" after "Mario Rossi")."""
+    """Bare first/last names of detected people ("Rossi" after "Mario Rossi").
+
+    Also the name-like parts of e-mail addresses and profile URLs: `zeno.cosini@...`
+    reveals that "Zeno" and "Cosini" are names, even with no title in the text.
+    """
     aliases: set[str] = set()
     for spans in per_segment.values():
         for span in spans:
+            if span.kind in {"EMAIL", "URL"}:
+                for token in _handle_tokens(span.text):
+                    aliases.update({token.capitalize(), token.upper()})
+                continue
             if span.kind != "PERSONA":
                 continue
             words = span.text.split()
@@ -187,6 +196,46 @@ def _person_aliases(per_segment: Mapping[str, list[Span]]) -> set[str]:
                 if len(bare) >= 3 and bare[0].isupper() and bare.lower() not in _PERSON_PARTICLES:
                     aliases.add(bare)
     return aliases
+
+
+_ROLE_WORDS = {
+    "info", "ufficio", "amministrazione", "acquisti", "segreteria", "contatti", "contact", "mail", "email",
+    "pec", "admin", "support", "supporto", "sales", "vendite", "office", "noreply", "posta", "hello",
+    "ciao", "commerciale", "fatture", "fatturazione", "ordini", "assistenza", "direzione", "personale",
+    "linkedin", "github", "gitlab", "twitter", "facebook", "instagram", "youtube", "profile", "profilo",
+    "company", "www", "http", "https", "gmail", "hotmail", "outlook", "yahoo", "libero", "example",
+}  # fmt: skip
+
+
+def _handle_tokens(text: str) -> list[str]:
+    """Alphabetic name-like parts of a mail local part or URL path (`a.rossi`, `/in/mario-rossi`)."""
+    local = text.split("@", 1)[0] if "@" in text else text.split("/", 1)[1] if "/" in text else ""
+    if "/" in local:
+        local = local.split("/", 2)[1] if local.startswith("in/") else local
+    tokens = re.split(r"[._\-+/0-9]+", local)
+    return [t for t in tokens if len(t) >= 4 and t.isalpha() and t.lower() not in _ROLE_WORDS]
+
+
+def _merge_adjacent_people(spans: list[Span], text: str) -> list[Span]:
+    """"Zeno" + "Cosini" found separately become one PERSONA block."""
+    merged: list[Span] = []
+    for span in spans:
+        previous = merged[-1] if merged else None
+        if (
+            previous is not None
+            and previous.kind == "PERSONA"
+            and span.kind == "PERSONA"
+            and previous.case_sensitive == span.case_sensitive
+            and text[previous.end : span.start] != ""
+            and text[previous.end : span.start].strip(" \t") == ""
+        ):
+            previous.end = span.end
+            previous.text = text[previous.start : previous.end]
+            previous.priority = max(previous.priority, span.priority)
+            previous.source = f"{previous.source}+{span.source}"
+            continue
+        merged.append(span)
+    return merged
 
 
 def _occurrences(
