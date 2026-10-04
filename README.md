@@ -8,7 +8,7 @@ document ──anonymize──▶ [PERSONA_1] signed with [AZIENDA_2] ──▶ 
               └──────────── encrypted per-project vault (stays on your machine) ─────────┘
 ```
 
-> **Status: early rewrite.** The engine and CLI work for `.docx`, `.xlsx`, `.txt`, `.md` and text-based `.pdf` (read as extracted text). A review UI and an optional local-LLM detector are next.
+> **Status: early rewrite.** The engine and CLI work for `.docx`, `.xlsx`, `.txt`, `.md` and text-based `.pdf` (read as extracted text). An optional local-LLM detector is next.
 
 ## Quick start
 
@@ -18,6 +18,7 @@ pip install -e ".[dev]"        # add the pdf extra ("persona[pdf]") if you only 
 persona init -p acme                                   # create the encrypted vault
 persona glossary add "Tessitura Valdarno S.r.l." -k AZIENDA -a Tessitura -p acme
 persona anonymize contract.md -p acme --dry-run        # see what would be masked
+persona anonymize contract.md -p acme --review         # go through each detection, add what was missed
 persona anonymize contract.md -p acme                  # -> contract.anon.md (after a safety check)
 
 persona anonymize offer.docx -p acme                   # -> offer.anon.docx, formatting kept
@@ -36,6 +37,7 @@ The password is asked interactively, or read from `PERSONA_PASSWORD`. Vaults liv
 - **Short, readable placeholders** (`[PERSONA_1]`, `[AZIENDA_2]`, `[IBAN_1]`): the kind tells the AI what the thing is, so it can write around it naturally.
 - **One vault per project**: the same value is always the same placeholder, across all documents of a client. The vault is a single AES-256-GCM file (Argon2id key) holding the mapping and your glossary.
 - **Detection in layers**: your glossary (highest recall: you know your clients), checksum-validated identifiers (IBAN, codice fiscale, P.IVA, e-mail), phone numbers, profile/web URLs, and heuristics for names (titles, a list of common Italian first names, labels like `Cognome:`, names hidden in e-mail addresses and profile URLs), company suffixes, institutions (`Liceo …`, `Cooperativa …`) and street addresses. A value found once is masked everywhere, including in later documents of the project.
+- **Review before masking** (`--review`): each distinct value is shown with its context; you can mask it, skip it this time, or mark it *never mask* (kept in the vault, so the same false positive never returns, see `persona allow`). At the end you can type names the detectors missed and they go into the glossary. `--exclude TEXT` skips a value for one run. Values you chose to leave in do not trigger the safety check.
 - **Safety check before sharing**: the file that was actually written is re-opened and re-scanned for every known value and for anything the detectors still find. If something is left, nothing is written (`--force` overrides).
 - **DOCX goes deep**: body, tables, headers, footers, footnotes/endnotes, comments, text boxes, tracked deletions, field codes (`HYPERLINK "mailto:…"`), hyperlink targets, image alt text, custom XML and document properties are all analysed. Formatting is kept: a placeholder inherits the run it starts in, even when the name was split across differently formatted runs. Who-made-the-file traces are scrubbed: author / last-modified-by / company, comment and revision authors, the page thumbnail and the people list. Scrubbed fields are not restored.
 - **XLSX goes deep too**: shared and inline strings (rich text included), formulas, cached results, **sheet names** and defined names (renamed consistently, bracket-less `AZIENDA_1` because Excel forbids `[ ]` in sheet names; formulas pointing at them are updated the same way), hyperlinks, headers/footers, validation texts, legacy and threaded comments, table column names, document properties. Numbers stay numbers; layout, charts and styles are untouched because only text nodes are edited. Phonetic guides of masked strings are dropped (they would reveal the original).
@@ -72,14 +74,13 @@ Known over-masking (by design, never the other way round): a capitalised first n
 
 ## Roadmap
 
-1. Review UI to approve/reject detections and add glossary entries on the spot.
-2. Optional local-LLM / NER detector for names (asked for text, never offsets), measured against the corpus.
-3. OCR for scanned PDFs and images (PDF *output* stays out of scope: the AI never needs a PDF back).
+1. Optional local-LLM / NER detector for names (asked for text, never offsets), measured against the corpus.
+2. OCR for scanned PDFs and images (PDF *output* stays out of scope: the AI never needs a PDF back).
 
 ## Development
 
 ```bash
-pytest                        # 253 tests, ~3 s
+pytest                        # 269 tests, ~3 s
 pytest tests/test_corpus.py -s
 ```
 

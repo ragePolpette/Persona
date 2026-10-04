@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from persona.exceptions import InputError, VaultError, WrongPasswordError
 from persona.placeholders import KINDS, format_placeholder
+from persona.textnorm import fold
 
 VAULT_VERSION = 1
 _AAD = b"persona-vault-v1"
@@ -67,6 +68,7 @@ class Vault:
         self._by_ref: dict[tuple[str, int], VaultEntry] = {}
         self._counters: dict[str, int] = {}
         self.glossary: list[GlossaryTerm] = []
+        self.allowlist: list[str] = []  # values that must never be masked (false positives)
 
     # -- lifecycle -----------------------------------------------------------------
 
@@ -169,6 +171,29 @@ class Vault:
         self.glossary.append(item)
         return item
 
+    def remove_glossary(self, term: str) -> bool:
+        before = len(self.glossary)
+        self.glossary = [item for item in self.glossary if item.term != term.strip()]
+        return len(self.glossary) < before
+
+    def allow(self, value: str) -> None:
+        """Never mask `value` again (case/accent-insensitive, whole text)."""
+        value = value.strip()
+        if not value:
+            raise InputError("Allowlist value cannot be empty.")
+        if not self.is_allowed(value):
+            self.allowlist.append(value)
+
+    def disallow(self, value: str) -> bool:
+        key = fold(value.strip())
+        before = len(self.allowlist)
+        self.allowlist = [item for item in self.allowlist if fold(item) != key]
+        return len(self.allowlist) < before
+
+    def is_allowed(self, text: str) -> bool:
+        key = fold(text.strip())
+        return any(fold(item) == key for item in self.allowlist)
+
     # -- serialization ---------------------------------------------------------------
 
     def _register(self, entry: VaultEntry) -> None:
@@ -186,6 +211,7 @@ class Vault:
             "glossary": [
                 {"term": g.term, "kind": g.kind, "aliases": g.aliases} for g in self.glossary
             ],
+            "allowlist": self.allowlist,
         }
         return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
@@ -205,6 +231,7 @@ class Vault:
                 self.glossary.append(
                     GlossaryTerm(term=item["term"], kind=item["kind"], aliases=list(item["aliases"]))
                 )
+            self.allowlist = [str(item) for item in payload.get("allowlist", [])]
         except (KeyError, TypeError, ValueError) as exc:
             raise VaultError("Vault payload is malformed.") from exc
 
