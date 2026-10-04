@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import functools
 import os
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
 import typer
 
-from persona.engine import Segment, analyze, apply, verify
+from persona.documents import open_document
+from persona.engine import analyze, apply, verify
 from persona.exceptions import InputError, PersonaError
 from persona.placeholders import KINDS
-from persona.readers import output_suffix, read_document
-from persona.restore import placeholders_in, restore_text
+from persona.restore import placeholders_in, restore_segments
 from persona.vault import Vault
 
 app = typer.Typer(
@@ -48,9 +49,6 @@ def _password(confirm: bool = False) -> str:
 
 def _open(project: Optional[str], vault: Optional[Path]) -> Vault:
     return Vault.open(_vault_path(project, vault), _password())
-
-
-_read = read_document
 
 
 def _guard(action):
@@ -108,10 +106,10 @@ def anonymize(
     project: Optional[str] = ProjectOption,
     vault: Optional[Path] = VaultOption,
 ) -> None:
-    """Mask sensitive data. Runs a safety check on the result before declaring it shareable."""
-    text = _read(file)
+    """Mask sensitive data. The written file is re-read and checked before it is declared shareable."""
+    document = open_document(file)
     opened = _open(project, vault)
-    analysis = analyze([Segment("text", text)], opened)
+    analysis = analyze(document.segments, opened)
 
     if dry_run:
         grouped: dict[tuple[str, str], list[str]] = defaultdict(list)
@@ -120,22 +118,28 @@ def anonymize(
         for (kind, value), sources in sorted(grouped.items()):
             typer.echo(f"{kind:10} x{len(sources)}  {value!r}  ({sources[0]})")
         typer.echo(f"{len(analysis.spans)} occurrence(s), {len(grouped)} distinct value(s). Nothing written.")
+        _print_warnings(document)
         return
 
     result = apply(analysis, opened)
-    censored = result.texts["text"]
-    leaks = verify({"text": censored}, opened)
-    if leaks and not force:
-        typer.secho("Safety check FAILED: sensitive data still present. Nothing written.", fg=typer.colors.RED, err=True)
-        for leak in leaks:
-            typer.echo(f"  {leak.text!r}  ({leak.reason})", err=True)
-        typer.echo("Add the names to the glossary (persona glossary add) and retry, or use --force.", err=True)
-        raise typer.Exit(code=2)
-
-    target = out or file.with_name(f"{file.stem}.anon{output_suffix(file)}")
-    target.write_text(censored, encoding="utf-8")
+    target = out or file.with_name(f"{file.stem}.anon{document.output_suffix}")
+    staging = target.with_name(f".{target.stem}.staging{target.suffix}")
+    try:
+        document.write(staging, result.edits)
+        written = open_document(staging)  # check what was actually written, not what we meant to write
+        leaks = verify({segment.id: segment.text for segment in written.segments}, opened)
+        if leaks and not force:
+            typer.secho("Safety check FAILED: sensitive data still present. Nothing written.", fg=typer.colors.RED, err=True)
+            for leak in leaks:
+                typer.echo(f"  {leak.text!r}  ({leak.reason})", err=True)
+            typer.echo("Add the names to the glossary (persona glossary add) and retry, or use --force.", err=True)
+            raise typer.Exit(code=2)
+        os.replace(staging, target)
+    finally:
+        staging.unlink(missing_ok=True)
     opened.save()
     typer.echo(f"Written: {target}  ({sum(result.placeholders.values())} masked, {len(result.placeholders)} distinct)")
+    _print_warnings(document)
     if leaks:
         typer.secho(f"Warning: {len(leaks)} leak(s) ignored because of --force.", fg=typer.colors.YELLOW, err=True)
 
@@ -148,9 +152,11 @@ def verify_cmd(
     vault: Optional[Path] = VaultOption,
 ) -> None:
     """Check a file for sensitive data before sharing it."""
-    leaks = verify({"text": _read(file)}, _open(project, vault))
+    document = open_document(file)
+    leaks = verify({segment.id: segment.text for segment in document.segments}, _open(project, vault))
     for leak in leaks:
         typer.echo(f"{leak.text!r}  ({leak.reason})")
+    _print_warnings(document)
     if leaks:
         raise typer.Exit(code=2)
     typer.echo("OK: nothing sensitive found.")
@@ -167,10 +173,15 @@ def restore(
 ) -> None:
     """Put the original values back into the AI's output."""
     opened = _open(project, vault)
-    expected = placeholders_in(_read(sent)) if sent else None
-    report = restore_text(_read(file), opened, expected=expected)
-    target = out or file.with_name(f"{file.stem}.restored{file.suffix}")
-    target.write_text(report.text, encoding="utf-8")
+    document = open_document(file)
+    expected: set[str] | None = None
+    if sent:
+        expected = set()
+        for segment in open_document(sent).segments:
+            expected |= placeholders_in(segment.text)
+    edits, report = restore_segments(document.segments, opened, expected=expected)
+    target = out or file.with_name(f"{file.stem}.restored{document.output_suffix}")
+    document.write(target, edits)
     typer.echo(f"Written: {target}  ({sum(report.restored.values())} placeholder(s) restored)")
     for raw, canonical in report.altered:
         typer.secho(f"Note: '{raw}' was altered, read as {canonical}", fg=typer.colors.YELLOW)
@@ -180,6 +191,11 @@ def restore(
         typer.secho(f"Warning: {placeholder} was sent but is missing from the output.", fg=typer.colors.YELLOW)
     if not report.clean:
         raise typer.Exit(code=3)
+
+
+def _print_warnings(document) -> None:
+    for warning in document.warnings:
+        typer.secho(f"Warning: {warning}", fg=typer.colors.YELLOW, err=True)
 
 
 def main() -> None:

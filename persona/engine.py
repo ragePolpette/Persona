@@ -12,6 +12,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence
 
+from persona.edits import Edit, apply_edits
 from persona.detect import GlossaryDetector, RuleDetector, Span, resolve_overlaps
 from persona.detect.base import PRIORITY_ALIAS, PRIORITY_KNOWN_VALUE, Detector
 from persona.textnorm import FoldedText
@@ -36,6 +37,7 @@ class Analysis:
 @dataclass(slots=True)
 class AnonymizeResult:
     texts: dict[str, str]
+    edits: dict[str, list[Edit]] = field(default_factory=dict)
     placeholders: Counter[str] = field(default_factory=Counter)
 
 
@@ -113,16 +115,13 @@ def apply(analysis: Analysis, vault: Vault) -> AnonymizeResult:
 
     result = AnonymizeResult(texts={})
     for segment in analysis.segments:
-        pieces: list[str] = []
-        cursor = 0
+        edits: list[Edit] = []
         for span in sorted(by_segment.get(segment.id, []), key=lambda s: s.start):
             placeholder = vault.placeholder_for(span.kind, span.text, case_sensitive=span.case_sensitive)
-            pieces.append(segment.text[cursor : span.start])
-            pieces.append(placeholder)
+            edits.append(Edit(span.start, span.end, placeholder))
             result.placeholders[placeholder] += 1
-            cursor = span.end
-        pieces.append(segment.text[cursor:])
-        result.texts[segment.id] = "".join(pieces)
+        result.edits[segment.id] = edits
+        result.texts[segment.id] = apply_edits(segment.text, edits)
     return result
 
 
