@@ -1,0 +1,43 @@
+{
+  "sensitive": [
+    {
+      "text": "Giorgio Esposito",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "12/03/1980",
+      "kind": "ALTRO"
+    },
+    {
+      "text": "Via Roma n. 5, 84121 Salerno",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "spsgrg80c12h703q",
+      "kind": "CF"
+    },
+    {
+      "text": "089 1234567",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "g.esposito@pec.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "AB123CD",
+      "kind": "ALTRO"
+    },
+    {
+      "text": "CA12345AB",
+      "kind": "ALTRO"
+    }
+  ],
+  "glossary": [],
+  "keep": [
+    "02/04/2026",
+    "art. 13",
+    "Regolamento UE 2016/679",
+    "DICHIARAZIONE SOSTITUTIVA"
+  ]
+}

@@ -54,7 +54,7 @@ _PARTICLE = r"(?:(?:de|di|da|del|della|lo|la|van|von)[ \t]+|d['’])"
 _NAME_WORD = rf"{_PARTICLE}?[{_UP}][{_UP}{_LOW}'’\-]+"
 _TITLE = (
     r"(?i:Sig\.ra|Sig\.na|Sig\.|Signora|Signor|Signore|Dott\.ssa|Dott\.|Dr\.ssa|Dr\.|Avv\.|"
-    r"Ing\.|Prof\.ssa|Prof\.|Geom\.|Arch\.|Rag\.|Notaio)"
+    r"Ing\.|Prof\.ssa|Prof\.|Geom\.|Arch\.|Rag\.|Notaio|Mrs\.?|Mr\.?|Ms\.?|Miss|Herr|Frau|Sra\.|Sr\.|Mme\.?|Mlle\.?)"
 )
 _PERSON_WITH_TITLE = re.compile(
     rf"(?<![\w]){_TITLE}[ \t]+(?P<name>{_NAME_WORD}(?:[ \t]+{_NAME_WORD}){{0,2}})"
@@ -74,7 +74,8 @@ _NAME_TRAILING_STOP = {
 
 _COMPANY_SUFFIX = (
     r"(?:S\.r\.l\.s?|S\.R\.L\.|SRL|Srl|S\.p\.A\.|S\.P\.A\.|S\.p\.a\.|SPA|SpA|S\.n\.c\.|S\.N\.C\.|"
-    r"SNC|Snc|S\.a\.s\.|S\.A\.S\.|SAS|Sas|Soc\.[ \t]?Coop\.|GmbH|Ltd|LLC|Inc\.|S\.A\.)"
+    r"SNC|Snc|S\.a\.s\.|S\.A\.S\.|SAS|Sas|Soc\.[ \t]?Coop\.|GmbH|Ltd|LLC|Inc\.|S\.A\.|"
+    r"S\.L\.U?\.?|SARL|S\.A\.R\.L\.|B\.V\.|N\.V\.|AG|KG|UG|PLC|Plc|Limited|Corp\.|Corporation|e\.V\.|Pty)"
 )
 _COMPANY_CAP = rf"(?!{_COMPANY_SUFFIX}(?![\w]))[{_UP}0-9][\w{_UP}{_LOW}&'’.\-]*"
 _COMPANY_CONNECTOR = r"(?:di|del|della|dei|degli|e|ed|&|and|de)(?![\w])"
@@ -95,7 +96,9 @@ _STREET_TYPE = (
 )
 _STREET_CONNECTOR = r"(?:(?:di|del|della|dei|degli|delle|dello|da|de|la|lo|il)[ \t]+|dell['’]|d['’])"
 _STREET_WORD = rf"[{_UP}][\w{_UP}{_LOW}'’\-]+"
-_STREET_FIRST_WORD = rf"[{_UP}][{_LOW}'’\-][\w{_UP}{_LOW}'’\-]*"
+_STREET_FIRST_WORD = (
+    rf"(?:[IVXLC]{{1,6}}(?![\w])(?=[ \t]+[{_UP}])|[{_UP}][{_LOW}'’\-][\w{_UP}{_LOW}'’\-]*)"
+)
 _STREET_NUMBER = r"(?:,?[ \t]*(?:n\.?°?[ \t]*|civ\.?[ \t]*)?\d{1,4}[ \t]?[A-Za-z]?(?:/[A-Za-z0-9]+)?)"
 _CAP_CITY = (
     rf"(?:[ \t]*[,\-–]?[ \t]*\d{{5}}[ \t]+[{_UP}][\w{_LOW}'’\-]+(?:[ \t]+[{_UP}][\w{_LOW}'’\-]+){{0,2}}"
@@ -104,6 +107,50 @@ _CAP_CITY = (
 _ADDRESS = re.compile(
     rf"(?<![\w]){_STREET_TYPE}[ \t]+(?:{_STREET_CONNECTOR})*{_STREET_FIRST_WORD}"
     rf"(?:[ \t]+(?:{_STREET_CONNECTOR})*{_STREET_WORD}){{0,3}}{_STREET_NUMBER}?{_CAP_CITY}?"
+)
+
+
+# --- foreign identifiers and addresses ---------------------------------------------------
+
+_INTL_PHONE = re.compile(r"(?<![\w.,/+\-])\+(?!39[ .\-]?\d)\d{1,3}(?:[ .\-]?\(?\d{1,4}\)?){2,5}")
+
+_EU_VAT = re.compile(
+    r"(?<![\w])(?:DE\d{9}|ATU\d{8}|ES[A-Z0-9]\d{7}[A-Z0-9]|FR[A-Z0-9]{2}\d{9}|NL\d{9}B\d{2}|BE[01]\d{9}|"
+    r"GB\d{9,12}|PT\d{9}|PL\d{10}|IE\d[A-Z0-9+*]\d{5}[A-Z]|LU\d{8}|DK\d{8}|SE\d{12}|FI\d{8}|CZ\d{8,10})(?![\w])"
+)
+_VAT_LABELED = re.compile(
+    r"(?:\bVAT|USt-?IdNr\.?|\bUID|\bNIF|\bCIF|\bTVA|Tax[ \t]?ID|Steuernummer)[ \t]*(?:No\.?|Nr\.?|number)?[ \t]*[:.]?[ \t]*"
+    r"([A-Z0-9]{8,14})(?![A-Za-z0-9])"
+)
+
+_DATE = r"\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}"
+_BIRTH_DATE = re.compile(
+    rf"(?:(?i:nato|nata)[ \t]+(?i:a|il)[^,\n]{{0,45}}?[ \t](?i:il)[ \t]+|(?i:data[ \t]+di[ \t]+nascita)[ \t]*[:.]?[ \t]*)({_DATE})"
+)
+_PLATE_LABELED = re.compile(r"(?i:targa|targato)[ \t]*(?:n\.?|nr\.?)?[ \t]*[:.]?[ \t]*([A-Z]{2}[ \t]?\d{3}[ \t]?[A-Z]{2})(?![A-Za-z0-9])")
+_ID_DOCUMENT = re.compile(
+    r"(?i:documento|carta[ \t]+d['’]identit[àa]|passaporto|patente)[^\n.;]{0,40}?\b(?i:n)\.?[ \t]*°?[ \t]*([A-Z0-9]{6,12})(?![A-Za-z0-9])"
+)
+
+_CITY = rf"[{_UP}][{_LOW}'’\-]+(?:[ \t]+[{_UP}][{_LOW}'’\-]+)?"
+_POSTCODE5_CITY = rf"(?:,?[ \t]*\d{{5}}[ \t]+{_CITY})"
+_ADDR_NAME_WORD = rf"[{_UP}][\w{_UP}{_LOW}'’\-]*"
+_UK_POSTCODE = r"[A-Z]{1,2}\d[A-Z\d]?[ \t]*\d[A-Z]{2}"
+_ENGLISH_ADDRESS = re.compile(
+    rf"(?<![\w])\d{{1,4}}[A-Za-z]?[ \t]+(?:{_ADDR_NAME_WORD}[ \t]+){{1,3}}"
+    r"(?i:Street|St\.|Road|Rd\.|Avenue|Ave\.|Lane|Ln\.|Drive|Square|Boulevard|Blvd\.|Way|Place|Court|Close|Crescent)(?![\w])"
+    rf"(?:,[ \t]*{_CITY})?(?:,?[ \t]*{_UK_POSTCODE})?"
+)
+_GERMAN_ADDRESS = re.compile(
+    rf"(?<![\w])[{_UP}][\wäöüßÄÖÜ\-]*(?i:straße|strasse|weg|platz|allee|gasse)[ \t]+\d{{1,4}}[A-Za-z]?{_POSTCODE5_CITY}?"
+)
+_SPANISH_ADDRESS = re.compile(
+    rf"(?<![\w])(?i:Calle|Avenida|Paseo|Plaza|Camino|Carretera)[ \t]+(?:(?:de|del|la|las|los)[ \t]+)*{_ADDR_NAME_WORD}"
+    rf"(?:[ \t]+{_ADDR_NAME_WORD}){{0,3}}(?:,?[ \t]*(?:n\.?º?[ \t]*)?\d{{1,4}}[A-Za-z]?)?{_POSTCODE5_CITY}?"
+)
+_FRENCH_ADDRESS = re.compile(
+    rf"(?<![\w])\d{{1,4}}(?:[ \t]?(?:bis|ter))?,?[ \t]+(?i:rue|avenue|boulevard|place|chemin|impasse|allée)[ \t]+"
+    rf"(?:(?:de|du|des|la|le|l')[ \t]*)*{_ADDR_NAME_WORD}(?:[ \t]+{_ADDR_NAME_WORD}){{0,3}}{_POSTCODE5_CITY}?"
 )
 
 _PROFILE_HOSTS = (
@@ -143,6 +190,9 @@ class RuleDetector:
             self._codici_fiscali,
             self._partite_iva,
             self._phones,
+            self._international_phones,
+            self._foreign_vat,
+            self._personal_details,
             self._urls,
             self._people,
             self._people_by_first_name,
@@ -150,6 +200,7 @@ class RuleDetector:
             self._companies,
             self._institutions,
             self._addresses,
+            self._foreign_addresses,
         ):
             spans.extend(finder(text))
         return spans
@@ -211,6 +262,33 @@ class RuleDetector:
                 national = national[2:]
             if 9 <= len(national) <= 11:
                 yield _span(match.start(), match.end(), "TELEFONO", text, "rules:phone", PRIORITY_PATTERN)
+
+    def _international_phones(self, text: str) -> Iterator[Span]:
+        for match in _INTL_PHONE.finditer(text):
+            digits = re.sub(r"\D", "", match.group(0))
+            if 9 <= len(digits) <= 15:
+                yield _span(match.start(), match.end(), "TELEFONO", text, "rules:phone-intl", PRIORITY_PATTERN)
+
+    def _foreign_vat(self, text: str) -> Iterator[Span]:
+        seen: set[tuple[int, int]] = set()
+        for match in _EU_VAT.finditer(text):
+            seen.add((match.start(), match.end()))
+            yield _span(match.start(), match.end(), "PIVA", text, "rules:vat-eu", PRIORITY_VALIDATED)
+        for match in _VAT_LABELED.finditer(text):
+            key = (match.start(1), match.end(1))
+            value = match.group(1)
+            if key not in seen and any(char.isdigit() for char in value):
+                yield _span(*key, "PIVA", text, "rules:vat-labeled", PRIORITY_VALIDATED)
+
+    def _personal_details(self, text: str) -> Iterator[Span]:
+        """Birth dates, number plates and identity-document numbers, found by their label."""
+        for match in _BIRTH_DATE.finditer(text):
+            yield _span(match.start(1), match.end(1), "ALTRO", text, "rules:birth-date", PRIORITY_PATTERN + 10)
+        for match in _PLATE_LABELED.finditer(text):
+            yield _span(match.start(1), match.end(1), "ALTRO", text, "rules:plate", PRIORITY_PATTERN + 10)
+        for match in _ID_DOCUMENT.finditer(text):
+            if any(char.isdigit() for char in match.group(1)):
+                yield _span(match.start(1), match.end(1), "ALTRO", text, "rules:id-document", PRIORITY_PATTERN + 10)
 
     # -- heuristics ----------------------------------------------------------------
 
@@ -279,6 +357,16 @@ class RuleDetector:
                 tokens.pop(0)
             start += tokens[0].start()
             yield _span(start, end, "AZIENDA", text, "rules:company-suffix", PRIORITY_HEURISTIC)
+
+    def _foreign_addresses(self, text: str) -> Iterator[Span]:
+        for pattern, source in (
+            (_ENGLISH_ADDRESS, "rules:address-en"),
+            (_GERMAN_ADDRESS, "rules:address-de"),
+            (_SPANISH_ADDRESS, "rules:address-es"),
+            (_FRENCH_ADDRESS, "rules:address-fr"),
+        ):
+            for match in pattern.finditer(text):
+                yield _span(match.start(), match.end(), "INDIRIZZO", text, source, PRIORITY_HEURISTIC)
 
     def _addresses(self, text: str) -> Iterator[Span]:
         for match in _ADDRESS.finditer(text):

@@ -45,18 +45,20 @@ Details and trade-offs: [docs/design.md](docs/design.md).
 
 ## What it catches today
 
-Measured on the synthetic Italian corpus in `tests/corpus` (9 documents including a CV, 88 sensitive values; run `pytest tests/test_corpus.py -s`):
+Measured on the synthetic corpus in `tests/corpus` (15 documents, 146 sensitive values; run `pytest tests/test_corpus.py -s`). Eight documents are Italian business texts (contracts, e-mail, minutes, invoice, CV…); six are a "hard set" with e-mail threads, foreign invoices and addresses (DE/ES/UK), EU VAT numbers, a declaration with birth date / plate / ID number, minutes with surnames only, an English contract.
 
 | | Without glossary | With glossary |
 |---|---|---|
-| E-mail, phone, IBAN, codice fiscale, P.IVA, addresses, URLs | 46/46 | 46/46 |
-| Companies and institutions | 17/19 | 19/19 |
-| People | 20/23 | 23/23 |
-| **Total** | **83/88** | **88/88** |
+| E-mail, phone (IT and international), IBAN, codice fiscale, VAT/P.IVA, addresses (IT/DE/ES/FR/UK), URLs, birth date / plate / ID number | 82/82 | 82/82 |
+| Companies and institutions | 24/26 | 26/26 |
+| People | 34/38 | 38/38 |
+| **Total** | **140/146** | **146/146** |
 
-What still needs the glossary: companies and schools without a legal suffix or a known keyword (`Officine Digitali Veronesi`), and a bare first name with no surname next to it (`Ciao Giulia`) unless the full name appears elsewhere in the same project. Cities are deliberately **not** masked.
+What still needs the glossary: companies and schools without a legal suffix or known keyword (`Officine Digitali Veronesi`), and a bare first name with no surname beside it (`Ciao Francesca`) unless the full name appears elsewhere in the same project. Cities are deliberately **not** masked unless they are part of an address with a postcode.
 
-Reality check on one real two-page PDF CV (not committed): address, phone, e-mail, name, LinkedIn and GitHub URLs and a school were caught with no setup; four employers/schools (no suffix) were not, and four glossary entries fixed that. The corpus is written by the author, so treat its numbers as a regression ratchet, not a guarantee. **Always review before sending real data.**
+How much to trust these numbers: the hard set scored **43/58 before** its rules existed and **57/58 after**, but the rules were written after looking at those misses, so that set is now *seen* data. The corpus is author-written; treat the numbers as a regression ratchet, not a guarantee. The only independent test so far is one real PDF CV (not committed): address, phone, e-mail, name, LinkedIn/GitHub URLs and a school were caught with no setup; four employers/schools without a suffix needed glossary entries. **Always review before sending real data.**
+
+Known over-masking (by design, never the other way round): a capitalised first name followed by a capitalised word is treated as a person (`Aurora Borealis`, `Victoria Station`), `Dr. House` is a person, a real street name in running text is an address.
 
 ## Limits worth knowing
 
@@ -77,7 +79,7 @@ Reality check on one real two-page PDF CV (not committed): address, phone, e-mai
 ## Development
 
 ```bash
-pytest                        # 181 tests, ~2 s
+pytest                        # 253 tests, ~3 s
 pytest tests/test_corpus.py -s
 ```
 

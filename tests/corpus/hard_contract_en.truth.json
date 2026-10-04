@@ -1,0 +1,44 @@
+{
+  "sensitive": [
+    {
+      "text": "John Peterson",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "221B Baker Street, London NW1 6XE",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "Northwind Trading Ltd",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "14 King's Road, Brighton BN1 2PQ",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "+44 20 7946 0958",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "john.peterson@northwind-consulting.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "GB29 NWBK 6016 1331 9268 19",
+      "kind": "IBAN"
+    },
+    {
+      "text": "Emily Carter",
+      "kind": "PERSONA"
+    }
+  ],
+  "glossary": [],
+  "keep": [
+    "CONSULTING AGREEMENT",
+    "1 July 2026",
+    "GBP 12,000",
+    "30 days",
+    "Managing Director"
+  ]
+}

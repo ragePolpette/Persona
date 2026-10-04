@@ -1,0 +1,44 @@
+{
+  "sensitive": [
+    {
+      "text": "Esposito",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Villa",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Anna Ricci",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Fabbri",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Ugo Fabbri",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Edil Rossi S.r.l.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "ricci.anna@mail.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "Via Mazzini 22",
+      "kind": "INDIRIZZO"
+    }
+  ],
+  "glossary": [],
+  "keep": [
+    "20/06/2026",
+    "18:00",
+    "€ 3.150,00",
+    "30/06/2026",
+    "6 su 9"
+  ]
+}

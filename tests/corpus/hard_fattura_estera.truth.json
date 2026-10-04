@@ -1,0 +1,51 @@
+{
+  "sensitive": [
+    {
+      "text": "Müller Maschinenbau GmbH",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Königsstraße 12, 70173 Stuttgart",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "DE123456789",
+      "kind": "PIVA"
+    },
+    {
+      "text": "DE89 3704 0044 0532 0130 00",
+      "kind": "IBAN"
+    },
+    {
+      "text": "+49 711 1234567",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "info@mueller-maschinenbau.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "Ibérica Suministros S.L.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Calle Mayor 25, 28013 Madrid",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "ESB12345674",
+      "kind": "PIVA"
+    },
+    {
+      "text": "ES91 2100 0418 4502 0005 1332",
+      "kind": "IBAN"
+    }
+  ],
+  "glossary": [],
+  "keep": [
+    "FATTURA N. 2026-0188",
+    "12 pezzi",
+    "€ 45.000,00",
+    "60 giorni"
+  ]
+}

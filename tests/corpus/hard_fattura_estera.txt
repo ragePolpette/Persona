@@ -1,0 +1,16 @@
+RECHNUNG / FATTURA N. 2026-0188
+
+Lieferant: Müller Maschinenbau GmbH
+Königsstraße 12, 70173 Stuttgart, Germania
+USt-IdNr.: DE123456789
+IBAN: DE89 3704 0044 0532 0130 00
+Tel. +49 711 1234567 - info@mueller-maschinenbau.example
+
+Cliente: Ibérica Suministros S.L.
+Calle Mayor 25, 28013 Madrid, Spagna
+NIF: ESB12345674
+IBAN: ES91 2100 0418 4502 0005 1332
+
+Descrizione: Fornitura macchinari, 12 pezzi
+Imponibile: € 45.000,00
+Termini: pagamento a 60 giorni data fattura

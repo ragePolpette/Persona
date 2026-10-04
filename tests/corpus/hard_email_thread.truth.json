@@ -1,0 +1,86 @@
+{
+  "sensitive": [
+    {
+      "text": "Laura Conti",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "laura.conti@studioconti.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "Marco Gentile",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "m.gentile@gentileimpianti.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "amministrazione@gentileimpianti.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "Via XX Settembre 18",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "Bellini",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Francesca",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "0522 334455",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "392 1122334",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "Studio Conti Architetti Associati",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "www.studioconti.example",
+      "kind": "URL"
+    },
+    {
+      "text": "Gentile Impianti S.n.c.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "03456789019",
+      "kind": "PIVA"
+    },
+    {
+      "text": "Via dell'Industria 7, 42124 Reggio Emilia (RE)",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "IT33Q0306909606100000012345",
+      "kind": "IBAN"
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Studio Conti Architetti Associati",
+      "kind": "AZIENDA",
+      "aliases": []
+    },
+    {
+      "term": "Francesca",
+      "kind": "PERSONA",
+      "aliases": []
+    }
+  ],
+  "keep": [
+    "€ 8.400,00",
+    "14/05/2026",
+    "30 giorni",
+    "giovedì alle 9:30"
+  ]
+}

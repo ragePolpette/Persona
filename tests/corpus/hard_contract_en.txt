@@ -1,0 +1,9 @@
+CONSULTING AGREEMENT
+
+This Agreement is made on 1 July 2026 between John Peterson, residing at 221B Baker Street, London NW1 6XE, United Kingdom
+(the "Consultant"), and Northwind Trading Ltd, registered office at 14 King's Road, Brighton BN1 2PQ (the "Client").
+
+The Consultant can be reached at +44 20 7946 0958 or john.peterson@northwind-consulting.example.
+Fees are GBP 12,000 per month, payable within 30 days to IBAN GB29 NWBK 6016 1331 9268 19.
+
+Signed by Mrs. Emily Carter, Managing Director, on behalf of the Client.
