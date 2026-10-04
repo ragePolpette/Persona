@@ -10,12 +10,12 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 from persona.edits import Edit, apply_edits
 from persona.detect import GlossaryDetector, RuleDetector, Span, resolve_overlaps
 from persona.detect.base import PRIORITY_ALIAS, PRIORITY_KNOWN_VALUE, Detector
-from persona.textnorm import FoldedText
+from persona.textnorm import FoldedText, fold
 from persona.vault import Vault
 
 
@@ -73,7 +73,7 @@ def analyze(
             found.extend(detector.detect(segment.text))
         for span in found:
             span.segment = segment.id
-        per_segment[segment.id] = found
+        per_segment[segment.id] = _drop_allowed(found, vault)
 
     if propagate:
         known = _known_values(per_segment, vault)
@@ -99,7 +99,7 @@ def analyze(
 
     spans: list[Span] = []
     for segment in segment_list:
-        resolved = resolve_overlaps(per_segment[segment.id])
+        resolved = resolve_overlaps(_drop_allowed(per_segment[segment.id], vault))
         spans.extend(_merge_adjacent_people(resolved, segment.text))
     return Analysis(segments=segment_list, spans=spans)
 
@@ -125,12 +125,14 @@ def apply(analysis: Analysis, vault: Vault) -> AnonymizeResult:
     return result
 
 
-def verify(texts: Mapping[str, str], vault: Vault) -> list[Leak]:
+def verify(texts: Mapping[str, str], vault: Vault, *, accepted: Iterable[str] = ()) -> list[Leak]:
     """Look for anything sensitive still present in the text about to be shared.
 
     Checks every value in the vault and glossary (case/accent-insensitive), and re-runs the
     rule detectors, so a sensitive value that was never approved is reported too.
+    `accepted` are values the user explicitly chose to leave in (review "skip", `--exclude`).
     """
+    accepted_keys = {fold(value.strip()) for value in accepted}
     rules = RuleDetector()
     leaks: list[Leak] = []
     for segment_id, text in texts.items():
@@ -144,7 +146,13 @@ def verify(texts: Mapping[str, str], vault: Vault) -> list[Leak]:
                     leaks.append(Leak(segment_id, start, end, text[start:end], f"glossary: {item.term}"))
         for span in rules.detect(text):
             leaks.append(Leak(segment_id, span.start, span.end, span.text, f"detected {span.kind} ({span.source})"))
-    return _dedupe(leaks)
+    return _dedupe(
+        [
+            leak
+            for leak in leaks
+            if not vault.is_allowed(leak.text) and fold(leak.text.strip()) not in accepted_keys
+        ]
+    )
 
 
 def anonymize_text(text: str, vault: Vault, *, segment_id: str = "text") -> tuple[str, AnonymizeResult]:
@@ -155,6 +163,12 @@ def anonymize_text(text: str, vault: Vault, *, segment_id: str = "text") -> tupl
 
 
 # -- helpers --------------------------------------------------------------------------
+
+
+def _drop_allowed(spans: list[Span], vault: Vault | None) -> list[Span]:
+    if vault is None or not vault.allowlist:
+        return spans
+    return [span for span in spans if not vault.is_allowed(span.text)]
 
 
 def _known_values(

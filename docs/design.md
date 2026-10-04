@@ -27,7 +27,7 @@ segments ─▶ detectors ─▶ propagate ─▶ resolve overlaps ─▶ (revie
 - **Names hidden in handles**: `zeno.cosini@…` or `linkedin.com/in/zeno-cosini` reveal that `Zeno` and `Cosini` are names, so they are masked wherever they appear capitalised; adjacent name parts are merged into one `PERSONA` block. Generic mailbox words (`ufficio`, `info`, `amministrazione`…) are excluded.
 - **Overlaps**: highest priority wins (validated > glossary > known value > pattern > heuristic > alias), then longest. A loser is not discarded: the part the winner does not cover is kept (trimmed of connectors), so a greedy heuristic match can never hide a value behind a neighbour. This fixed a real leak found with the corpus (`Giulia Marchetti di Tessitura Valdarno S.r.l.`).
 - **Apply** registers values in the vault and replaces approved spans; the caller saves the vault.
-- **Review** is `Span.approved`: the engine already supports rejecting detections; the UI is to come.
+- **Review** (`persona/review.py`) is `Span.approved` plus a loop with injected prompts (so a UI can reuse it): per distinct value mask / skip once / never (allowlist in the vault) / mask-all-the-rest, then a "missed anything?" step that adds glossary entries and re-runs detection. The allowlist is applied before and after propagation and in `verify`, so a rejected false positive cannot come back through a known value. Values explicitly skipped are passed to `verify` as `accepted`, because the user's decision must not be reported as a leak.
 
 ## Documents
 

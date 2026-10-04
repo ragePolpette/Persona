@@ -14,6 +14,7 @@ from persona.engine import analyze, apply, verify
 from persona.exceptions import InputError, PersonaError
 from persona.placeholders import KINDS
 from persona.restore import placeholders_in, restore_segments
+from persona.review import run_review
 from persona.vault import Vault
 
 app = typer.Typer(
@@ -23,6 +24,8 @@ app = typer.Typer(
 )
 glossary_app = typer.Typer(no_args_is_help=True, help="Names to always mask in a project.")
 app.add_typer(glossary_app, name="glossary")
+allow_app = typer.Typer(no_args_is_help=True, help="Values that must never be masked (false positives).")
+app.add_typer(allow_app, name="allow")
 
 ProjectOption = typer.Option(None, "--project", "-p", help="Project name (vault in ~/.persona/projects).")
 VaultOption = typer.Option(None, "--vault", help="Explicit vault path (overrides --project).")
@@ -96,6 +99,58 @@ def glossary_list(project: Optional[str] = ProjectOption, vault: Optional[Path] 
         typer.echo(f"{item.kind:10} {', '.join(item.all_forms)}")
 
 
+@glossary_app.command("remove")
+@_guard
+def glossary_remove(
+    term: str = typer.Argument(...),
+    project: Optional[str] = ProjectOption,
+    vault: Optional[Path] = VaultOption,
+) -> None:
+    """Remove a name from the project glossary."""
+    opened = _open(project, vault)
+    if not opened.remove_glossary(term):
+        raise InputError(f"'{term}' is not in the glossary.")
+    opened.save()
+    typer.echo(f"Removed: {term}")
+
+
+@allow_app.command("add")
+@_guard
+def allow_add(
+    value: str = typer.Argument(..., help="Text that must never be masked, e.g. 'Aurora Borealis'"),
+    project: Optional[str] = ProjectOption,
+    vault: Optional[Path] = VaultOption,
+) -> None:
+    """Never mask this value (case/accent-insensitive)."""
+    opened = _open(project, vault)
+    opened.allow(value)
+    opened.save()
+    typer.echo(f"Allowed: {value}")
+
+
+@allow_app.command("list")
+@_guard
+def allow_list(project: Optional[str] = ProjectOption, vault: Optional[Path] = VaultOption) -> None:
+    """Show the values that are never masked."""
+    for value in _open(project, vault).allowlist:
+        typer.echo(value)
+
+
+@allow_app.command("remove")
+@_guard
+def allow_remove(
+    value: str = typer.Argument(...),
+    project: Optional[str] = ProjectOption,
+    vault: Optional[Path] = VaultOption,
+) -> None:
+    """Mask this value again."""
+    opened = _open(project, vault)
+    if not opened.disallow(value):
+        raise InputError(f"'{value}' is not in the allowlist.")
+    opened.save()
+    typer.echo(f"No longer allowed: {value}")
+
+
 @app.command()
 @_guard
 def anonymize(
@@ -103,18 +158,35 @@ def anonymize(
     out: Optional[Path] = typer.Option(None, "--out", "-o", help="Default: <name>.anon.<ext> (.txt for PDFs)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Only show what would be masked."),
     force: bool = typer.Option(False, "--force", help="Write the file even if the safety check finds leaks."),
+    review: bool = typer.Option(False, "--review", help="Go through each detection before masking."),
+    exclude: list[str] = typer.Option([], "--exclude", "-x", help="Do not mask this exact text (this time only)."),
     project: Optional[str] = ProjectOption,
     vault: Optional[Path] = VaultOption,
 ) -> None:
     """Mask sensitive data. The written file is re-read and checked before it is declared shareable."""
     document = open_document(file)
     opened = _open(project, vault)
-    analysis = analyze(document.segments, opened)
+    if review and not dry_run:
+        analysis = run_review(
+            lambda: analyze(document.segments, opened),
+            opened,
+            lambda prompt, default: typer.prompt(prompt, default=default, show_default=False),
+            typer.echo,
+        )
+        opened.save()  # glossary and allowlist decisions are worth keeping even if the run fails later
+    else:
+        analysis = analyze(document.segments, opened)
+    excluded = {value.strip() for value in exclude}
+    for span in analysis.spans:
+        if span.text in excluded:
+            span.approved = False
+    accepted = {span.text for span in analysis.spans if not span.approved}  # the user chose to leave these in
 
     if dry_run:
         grouped: dict[tuple[str, str], list[str]] = defaultdict(list)
         for span in analysis.spans:
-            grouped[(span.kind, span.text)].append(span.source)
+            if span.approved:
+                grouped[(span.kind, span.text)].append(span.source)
         for (kind, value), sources in sorted(grouped.items()):
             typer.echo(f"{kind:10} x{len(sources)}  {value!r}  ({sources[0]})")
         typer.echo(f"{len(analysis.spans)} occurrence(s), {len(grouped)} distinct value(s). Nothing written.")
@@ -127,7 +199,7 @@ def anonymize(
     try:
         document.write(staging, result.edits)
         written = open_document(staging)  # check what was actually written, not what we meant to write
-        leaks = verify({segment.id: segment.text for segment in written.segments}, opened)
+        leaks = verify({segment.id: segment.text for segment in written.segments}, opened, accepted=accepted)
         if leaks and not force:
             typer.secho("Safety check FAILED: sensitive data still present. Nothing written.", fg=typer.colors.RED, err=True)
             for leak in leaks:
