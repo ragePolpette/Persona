@@ -31,12 +31,19 @@ segments ─▶ detectors ─▶ propagate ─▶ resolve overlaps ─▶ (revie
 
 ## Documents
 
-`persona/documents.py`: `open_document(path)` returns segments (what the engine reads) and `write(out, edits)` (what it changes). Text and PDF are one segment. DOCX is edited at the XML level inside the zip, so nothing outside the touched text nodes is rewritten.
+`persona/documents.py`: `open_document(path)` returns segments (what the engine reads) and `write(out, edits)` (what it changes). Text and PDF are one segment. DOCX and XLSX share `persona/ooxml.py` (zip rewrite, locators, scrubbing) and are edited at the XML level, so nothing outside the touched text nodes is rewritten.
 
 - Segments: every paragraph of the body, headers, footers, footnotes, endnotes, comments, glossary; text-box paragraphs are separate segments (not double-counted in the outer paragraph); tracked-deletion text and field-code text are separate streams per paragraph; external hyperlink targets; image alt text; custom XML leaf text; title/subject/keywords and `vt:` strings in document properties (heading lists in `app.xml` repeat document text).
 - Edits are `(start, end, text)` on a segment's text. Characters map back to `w:t` nodes; the replacement goes in the first covered node, the rest of the covered characters are blanked, tabs and line breaks stay. So formatting follows the run where the match starts, and a placeholder the AI split over runs is still found on restore.
 - Scrubbed on write, never restored: creator, last-modified-by, company, manager, hyperlink base; `w:author` / `w:initials` on revisions and comments; `people.xml`; `docProps/thumbnail.*` (a picture of page 1) and its relationship.
 - `anonymize` writes to a staging file, **re-opens it**, verifies the text actually on disk, and only then moves it into place.
+
+### XLSX specifics
+
+- Sheet names, defined names, formulas, hyperlink locations and app-properties title lists mirror each other, so they are all masked with the same bracket-less placeholder (`AZIENDA_1`): `'Acme S.r.l.'!B2` becomes `'AZIENDA_1'!B2` and still points at the renamed sheet. Restore reads the bare form back.
+- A shared string is one segment however many cells use it, so propagation and numbering behave as in a document. Phonetic guides (`rPh`) are dropped when their text is edited.
+- Scrubbed on write: creator, last-modified-by, company, manager, comment authors (`<author>`), threaded-comment persons, `fileSharing` user name, thumbnail.
+- Found by the tests, not by design: openpyxl stores comments under `xl/comments/`, Excel under `xl/commentsN.xml`; both are read.
 
 ## Vault
 
