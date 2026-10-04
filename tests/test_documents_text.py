@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from persona import cli
 from persona.exceptions import InputError
-from persona.readers import output_suffix, read_document
+from persona.documents import open_document
 from persona.vault import Argon2Params
 
 
@@ -24,7 +24,9 @@ def make_pdf(path: Path, lines: list[str]) -> Path:
 
 def test_pdf_text_is_extracted(tmp_path: Path) -> None:
     pdf = make_pdf(tmp_path / "cv.pdf", ["Dott. Mario Rossi", "mario.rossi@example.test"])
-    text = read_document(pdf)
+    document = open_document(pdf)
+    text = document.segments[0].text
+    assert document.output_suffix == ".txt"
     assert "Dott. Mario Rossi" in text and "mario.rossi@example.test" in text
 
 
@@ -34,19 +36,14 @@ def test_pdf_without_text_is_rejected(tmp_path: Path) -> None:
     pdf.showPage()
     pdf.save()
     with pytest.raises(InputError, match="OCR"):
-        read_document(empty)
+        open_document(empty)
 
 
 def test_broken_pdf_is_a_clean_error(tmp_path: Path) -> None:
     broken = tmp_path / "x.pdf"
     broken.write_bytes(b"not a pdf")
     with pytest.raises(InputError):
-        read_document(broken)
-
-
-def test_output_suffix() -> None:
-    assert output_suffix(Path("a.pdf")) == ".txt"
-    assert output_suffix(Path("a.MD")) == ".MD"
+        open_document(broken)
 
 
 def test_pdf_through_the_cli_gives_a_txt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

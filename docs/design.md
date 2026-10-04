@@ -29,6 +29,15 @@ segments ─▶ detectors ─▶ propagate ─▶ resolve overlaps ─▶ (revie
 - **Apply** registers values in the vault and replaces approved spans; the caller saves the vault.
 - **Review** is `Span.approved`: the engine already supports rejecting detections; the UI is to come.
 
+## Documents
+
+`persona/documents.py`: `open_document(path)` returns segments (what the engine reads) and `write(out, edits)` (what it changes). Text and PDF are one segment. DOCX is edited at the XML level inside the zip, so nothing outside the touched text nodes is rewritten.
+
+- Segments: every paragraph of the body, headers, footers, footnotes, endnotes, comments, glossary; text-box paragraphs are separate segments (not double-counted in the outer paragraph); tracked-deletion text and field-code text are separate streams per paragraph; external hyperlink targets; image alt text; custom XML leaf text; title/subject/keywords and `vt:` strings in document properties (heading lists in `app.xml` repeat document text).
+- Edits are `(start, end, text)` on a segment's text. Characters map back to `w:t` nodes; the replacement goes in the first covered node, the rest of the covered characters are blanked, tabs and line breaks stay. So formatting follows the run where the match starts, and a placeholder the AI split over runs is still found on restore.
+- Scrubbed on write, never restored: creator, last-modified-by, company, manager, hyperlink base; `w:author` / `w:initials` on revisions and comments; `people.xml`; `docProps/thumbnail.*` (a picture of page 1) and its relationship.
+- `anonymize` writes to a staging file, **re-opens it**, verifies the text actually on disk, and only then moves it into place.
+
 ## Vault
 
 Single JSON envelope: Argon2id (t=3, m=64 MiB, p=4) → AES-256-GCM, AAD `persona-vault-v1`, atomic write, mode 0600. Contents: entries (`kind`, `number`, `value`, `case_sensitive`) and the glossary. A wrong password and a tampered file are indistinguishable (GCM), and reported as such.
