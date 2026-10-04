@@ -1,0 +1,78 @@
+{
+  "sensitive": [
+    {
+      "text": "Paolo Bianchi",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Bianchi Logistica S.n.c.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Chiara De Luca",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Luca Fontana",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Via dei Mille 3/B, 80121 Napoli",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "Paolo",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Chiara",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Luca",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "chiara.deluca@bianchilogistica.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "081 5551234",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "IT12 K054 2811 1010 0000 0987 654",
+      "kind": "IBAN"
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Paolo Bianchi",
+      "kind": "PERSONA",
+      "aliases": [
+        "Paolo"
+      ]
+    },
+    {
+      "term": "Chiara De Luca",
+      "kind": "PERSONA",
+      "aliases": [
+        "Chiara"
+      ]
+    },
+    {
+      "term": "Luca Fontana",
+      "kind": "PERSONA",
+      "aliases": [
+        "Luca"
+      ]
+    }
+  ],
+  "keep": [
+    "12/04/2026",
+    "€ 48.200,00",
+    "€ 7.500,00",
+    "30/04/2026",
+    "budget 2026"
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "sensitive": [
+    {
+      "text": "Studio Legale Caruso & Associati",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Via Roma 21, 80134 Napoli",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "Roberto Ferrante",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Officine Meridiane S.p.A.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Corso Vittorio Emanuele II, 88 - 20122 Milano",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "Tessitura Valdarno S.r.l.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "04123456784",
+      "kind": "PIVA"
+    },
+    {
+      "text": "Ferrante",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Elena Sorrentino",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "333 1112233",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "e.sorrentino@carusoassociati.example",
+      "kind": "EMAIL"
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Studio Legale Caruso & Associati",
+      "kind": "AZIENDA",
+      "aliases": []
+    },
+    {
+      "term": "Roberto Ferrante",
+      "kind": "PERSONA",
+      "aliases": [
+        "Ferrante"
+      ]
+    }
+  ],
+  "keep": [
+    "15 giorni",
+    "2026/031",
+    "€ 12.500,00",
+    "Tribunale di Firenze",
+    "Raccomandata A/R"
+  ]
+}

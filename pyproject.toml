@@ -4,41 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "persona"
-version = "0.1.0"
-description = "Local/offline reversible document anonymization engine and app, guided by a local LLM."
+version = "0.2.0"
+description = "Anonymize documents before sharing them with an AI, then restore the AI's output."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Gianmarco" }]
 dependencies = [
   "typer>=0.16,<1.0",
-  "rich>=14.0,<15.0",
-  "cryptography>=44.0,<46.0",
-  "argon2-cffi>=23.1,<26.0",
-  "presidio-analyzer>=2.2.355,<3.0",
-  "presidio-anonymizer>=2.2.355,<3.0",
-  "spacy>=3.8,<4.0",
-  "python-docx>=1.1,<2.0",
-  "openpyxl>=3.1,<4.0",
-  "pdfplumber>=0.11,<1.0",
-  "reportlab>=4.2,<5.0",
-  "fastapi>=0.116,<1.0",
-  "uvicorn>=0.35,<1.0",
-  "python-multipart>=0.0.20,<1.0",
+  "cryptography>=44.0",
+  "argon2-cffi>=23.1",
 ]
 
 [project.optional-dependencies]
-dev = [
-  "pytest>=8.3,<9.0",
-  "pytest-cov>=6.0,<7.0",
-  "httpx>=0.28,<1.0",
-]
+pdf = ["pdfplumber>=0.11,<1.0"]
+dev = ["pytest>=8.3,<9.0", "pdfplumber>=0.11,<1.0", "reportlab>=4.2,<5.0"]
 
 [project.scripts]
 persona = "persona.cli:app"
-
-[tool.setuptools]
-include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["persona*"]

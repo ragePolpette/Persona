@@ -1,0 +1,16 @@
+FATTURA N. 2026/031 del 10/03/2026
+
+Cedente: Tessitura Valdarno S.r.l.
+Via Giuseppe Mazzini 14, 50123 Firenze (FI)
+P.IVA IT04123456784 - C.F. 04123456784
+
+Cessionario: Officine Meridiane S.p.A.
+Corso Vittorio Emanuele II, 88 - 20122 Milano (MI)
+P.IVA 01876543214
+
+Fornitura tessuto tecnico (ordine 2026/0457)      € 10.245,90
+IVA 22%                                            € 2.254,10
+Totale documento                                   € 12.500,00
+
+Scadenza: 09/04/2026
+Coordinate bancarie: IBAN IT83X0306909606100000063456

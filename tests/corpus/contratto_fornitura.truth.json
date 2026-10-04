@@ -1,0 +1,65 @@
+{
+  "sensitive": [
+    {
+      "text": "Tessitura Valdarno S.r.l.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Via Giuseppe Mazzini 14, 50123 Firenze (FI)",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "04123456784",
+      "kind": "PIVA"
+    },
+    {
+      "text": "Giulia Marchetti",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "MRCGLI85M41D612Y",
+      "kind": "CF"
+    },
+    {
+      "text": "Officine Meridiane S.p.A.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Corso Vittorio Emanuele II, 88 - 20122 Milano (MI)",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "01876543214",
+      "kind": "PIVA"
+    },
+    {
+      "text": "Roberto Ferrante",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "FRRRRT72C15F205N",
+      "kind": "CF"
+    },
+    {
+      "text": "IT83 X030 6909 6061 0000 0063 456",
+      "kind": "IBAN"
+    },
+    {
+      "text": "amministrazione@tessituravaldarno.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "+39 055 1234567",
+      "kind": "TELEFONO"
+    }
+  ],
+  "glossary": [],
+  "keep": [
+    "4.500 metri",
+    "Allegato 1",
+    "30 giorni",
+    "€ 12.500,00",
+    "01/03/2026",
+    "Art. 2"
+  ]
+}

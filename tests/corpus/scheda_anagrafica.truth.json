@@ -1,0 +1,55 @@
+{
+  "sensitive": [
+    {
+      "text": "Chiara",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "De Luca",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "SRRLNE90A41H501O",
+      "kind": "CF"
+    },
+    {
+      "text": "+39 349 8765432",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "c.deluca@bianchilogistica.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "Via dei Mille 3/B, 80121 Napoli",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "IT12K0542811101000000987654",
+      "kind": "IBAN"
+    },
+    {
+      "text": "Bianchi Logistica S.n.c.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "02765432105",
+      "kind": "PIVA"
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Chiara De Luca",
+      "kind": "PERSONA",
+      "aliases": [
+        "Chiara",
+        "De Luca"
+      ]
+    }
+  ],
+  "keep": [
+    "01/09/2024",
+    "Livello: 4",
+    "SCHEDA ANAGRAFICA DIPENDENTE"
+  ]
+}

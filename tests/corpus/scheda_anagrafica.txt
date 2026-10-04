@@ -1,0 +1,12 @@
+SCHEDA ANAGRAFICA DIPENDENTE
+
+Nome: Chiara
+Cognome: De Luca
+Codice Fiscale: SRRLNE90A41H501O
+Data di assunzione: 01/09/2024
+Livello: 4
+Telefono: +39 349 8765432
+Email aziendale: c.deluca@bianchilogistica.example
+Residenza: Via dei Mille 3/B, 80121 Napoli
+IBAN per stipendio: IT12K0542811101000000987654
+Datore di lavoro: Bianchi Logistica S.n.c. (P.IVA 02765432105)

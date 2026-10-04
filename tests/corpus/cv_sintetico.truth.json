@@ -1,0 +1,74 @@
+{
+  "sensitive": [
+    {
+      "text": "Via Garibaldi 12 – 37121 Verona (VR)",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "Davide Lombardi",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "+39 347 55 66 778",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "davide.lombardi@example.test",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "linkedin.com/in/davide-lombardi",
+      "kind": "URL"
+    },
+    {
+      "text": "github.com/dlombardi-dev",
+      "kind": "URL"
+    },
+    {
+      "text": "Officine Digitali Veronesi",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Cantiere Web Studio",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Istituto Tecnico Marconi",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Elisa Moretti",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Università di Verona",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "elisa.moretti@univr.example",
+      "kind": "EMAIL"
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Officine Digitali Veronesi",
+      "kind": "AZIENDA",
+      "aliases": []
+    },
+    {
+      "term": "Cantiere Web Studio",
+      "kind": "AZIENDA",
+      "aliases": []
+    }
+  ],
+  "keep": [
+    "Python",
+    "Node.js",
+    "Vue.js",
+    "PostgreSQL",
+    "FastAPI",
+    "2019 – presente",
+    "SDI",
+    "Linux"
+  ]
+}

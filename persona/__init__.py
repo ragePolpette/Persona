@@ -1,4 +1,3 @@
-__all__ = ["__version__"]
+"""Persona: reversible anonymization for the "share with an AI, get the result back" loop."""
 
-__version__ = "0.1.0"
-
+__version__ = "0.2.0"
