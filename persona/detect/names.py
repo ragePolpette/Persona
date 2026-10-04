@@ -37,7 +37,28 @@ fabiana flavia gemma ginevra greta lidia livia lorella mara miriam nora olga pie
 vittoria ludovica maddalena mariella marzia milena morena
 """.split()
 
-FIRST_NAMES = frozenset(fold(name) for name in (*_MALE, *_FEMALE))
+# Common names from the languages business documents mix in. Ambiguous English words that are also
+# names (Mark, Will, Bill, Grace, Hope, Frank, Rose, May, Pat, Don, Art) are left out on purpose.
+_INTERNATIONAL = """
+john james robert michael william david richard joseph thomas charles daniel matthew anthony paul
+steven andrew kevin brian george edward peter jason jeffrey ryan jacob gary nicholas eric stephen
+larry justin scott brandon benjamin samuel gregory raymond patrick alexander jack dennis jerry
+tyler aaron henry adam douglas nathan zachary kyle walter harold jeremy ethan carl keith roger
+gerald terry sean arthur austin noah lawrence jesse joe bryan billy jordan albert dylan bruce
+gabriel alan juan logan wayne ralph roy eugene randy vincent russell louis philip bobby johnny
+bradley mary patricia jennifer linda elizabeth susan sarah karen nancy betty sandra ashley kimberly
+emily donna michelle carol amanda dorothy melissa stephanie rebecca sharon cynthia kathleen amy
+shirley brenda nicole helen samantha katherine christine debra rachel carolyn janet catherine
+heather diane olivia julie joyce victoria ruth virginia lauren kelly christina joan evelyn judith
+megan cheryl hannah jacqueline martha ann madison frances kathryn janice jean abigail julia judy
+sophia denise amber doris marilyn danielle beverly isabella theresa natalie brittany charlotte
+marie kayla alexis lori hans klaus wolfgang juergen jurgen stefan andreas markus martin joerg uwe
+bernd dieter heike petra sabine monika ursula birgit susanne jose carlos miguel javier francisco
+jesus luis pedro pablo jorge rafael carmen pilar dolores lucia isabel paula raquel pierre michel
+philippe alain jacques bernard nicolas francois nathalie isabelle sylvie sophie camille
+"""
+
+FIRST_NAMES = frozenset(fold(name) for name in (*_MALE, *_FEMALE, *_INTERNATIONAL.split()))
 
 
 def is_first_name(word: str) -> bool:

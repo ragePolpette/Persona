@@ -1,0 +1,8 @@
+SCHEDA CLIENTE
+
+Ragione sociale: Panificio Dolce Vita di Rossi & C.
+Referente: Sig.ra Martina Greco - cell. 331 9988776
+Sede: Strada Provinciale 12 km 3, Località Pianoro Vecchio, 40065 Pianoro (BO)
+Sito: https://www.panificiodolcevita.example/contatti
+PEC: panificiodolcevita@pec.example
+Note: pagamenti sempre a 60 giorni, sconto 5% sopra € 2.000,00. Contattare prima Martina, poi il titolare Piero Rossi.

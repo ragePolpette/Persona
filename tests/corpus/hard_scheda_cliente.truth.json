@@ -1,0 +1,43 @@
+{
+  "sensitive": [
+    {
+      "text": "Panificio Dolce Vita di Rossi & C.",
+      "kind": "AZIENDA"
+    },
+    {
+      "text": "Martina Greco",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "331 9988776",
+      "kind": "TELEFONO"
+    },
+    {
+      "text": "Strada Provinciale 12 km 3, Località Pianoro Vecchio, 40065 Pianoro (BO)",
+      "kind": "INDIRIZZO"
+    },
+    {
+      "text": "https://www.panificiodolcevita.example/contatti",
+      "kind": "URL"
+    },
+    {
+      "text": "panificiodolcevita@pec.example",
+      "kind": "EMAIL"
+    },
+    {
+      "text": "Martina",
+      "kind": "PERSONA"
+    },
+    {
+      "text": "Piero Rossi",
+      "kind": "PERSONA"
+    }
+  ],
+  "glossary": [],
+  "keep": [
+    "SCHEDA CLIENTE",
+    "60 giorni",
+    "sconto 5%",
+    "€ 2.000,00"
+  ]
+}

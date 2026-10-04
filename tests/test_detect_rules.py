@@ -142,3 +142,83 @@ def test_institutions_without_a_legal_suffix() -> None:
     assert ("AZIENDA", "Cooperativa Il Girasole") in found("ritardi su Cooperativa Il Girasole, il nostro")
     assert ("AZIENDA", "Studio Legale Caruso & Associati") in found("Studio Legale Caruso & Associati\nVia")
     assert [k for k, _ in found("Ho fatto uno studio sulla scuola")] == []
+
+
+@pytest.mark.parametrize(
+    "phone", ["+44 20 7946 0958", "+49 711 1234567", "+34 91 123 45 67", "+1 415 555 0132", "+33 1 42 68 53 00"]
+)
+def test_international_phone_numbers(phone: str) -> None:
+    assert ("TELEFONO", phone) in found(f"chiamare {phone} domani")
+
+
+@pytest.mark.parametrize("text", ["crescita +3.5% annua", "+12 mesi", "tel. +IVA", "+2026 punti"])
+def test_plus_signs_in_ordinary_text_are_not_phones(text: str) -> None:
+    assert [k for k, _ in found(text) if k == "TELEFONO"] == []
+
+
+@pytest.mark.parametrize("vat", ["DE123456789", "ESB12345674", "ATU12345678", "FR12345678901", "NL123456789B01"])
+def test_eu_vat_numbers(vat: str) -> None:
+    assert ("PIVA", vat) in found(f"Partita {vat} intestata")
+
+
+def test_labeled_vat_with_other_formats() -> None:
+    assert ("PIVA", "CHE123456789") in found("VAT: CHE123456789")
+    assert ("PIVA", "B12345678") not in found("sede B12345678")
+
+
+def test_foreign_ibans() -> None:
+    assert ("IBAN", "GB29 NWBK 6016 1331 9268 19") in found("IBAN GB29 NWBK 6016 1331 9268 19.")
+    assert ("IBAN", "ES91 2100 0418 4502 0005 1332") in found("IBAN: ES91 2100 0418 4502 0005 1332")
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "221B Baker Street, London NW1 6XE",
+        "14 King's Road, Brighton BN1 2PQ",
+        "Königsstraße 12, 70173 Stuttgart",
+        "Hauptstrasse 5, 10115 Berlin",
+        "Calle Mayor 25, 28013 Madrid",
+        "Avenida de la Constitución 3, 41004 Sevilla",
+        "12 rue de la Paix, 75002 Paris",
+        "Via XX Settembre 18",
+    ],
+)
+def test_foreign_and_roman_numeral_addresses(address: str) -> None:
+    assert ("INDIRIZZO", address) in found(f"sede in {address}.")
+
+
+def test_dates_and_numbers_before_street_words_are_not_addresses() -> None:
+    assert [k for k, _ in found("entro 30 days from now, 2 Way trips")] == []
+
+
+def test_birth_date_plate_and_id_document_by_label() -> None:
+    text = (
+        "nato a Salerno (SA) il 12/03/1980, targa AB123CD, documento di identità n. CA12345AB; "
+        "Data di nascita: 01.02.1975"
+    )
+    assert ("ALTRO", "12/03/1980") in found(text)
+    assert ("ALTRO", "AB123CD") in found(text)
+    assert ("ALTRO", "CA12345AB") in found(text)
+    assert ("ALTRO", "01.02.1975") in found(text)
+
+
+def test_unlabeled_dates_and_plates_are_left_alone() -> None:
+    assert found("Salerno, 02/04/2026. Codice AB123CD. Fattura del 10/03/2026.") == []
+
+
+def test_english_titles_and_first_names() -> None:
+    assert ("PERSONA", "Emily Carter") in found("Signed by Mrs. Emily Carter, Managing Director")
+    assert ("PERSONA", "Smith") in found("Mr. Smith agreed")
+    assert ("PERSONA", "John Peterson") in found("between John Peterson and the Client")
+
+
+def test_foreign_company_suffixes() -> None:
+    assert ("AZIENDA", "Müller Maschinenbau GmbH") in found("Lieferant: Müller Maschinenbau GmbH, Stuttgart")
+    assert ("AZIENDA", "Ibérica Suministros S.L.") in found("Cliente: Ibérica Suministros S.L., Madrid")
+    assert ("AZIENDA", "Northwind Trading Ltd") in found("between Northwind Trading Ltd, registered")
+    assert ("AZIENDA", "Delta Soluciones SARL") in found("avec Delta Soluciones SARL à Lyon")
+
+
+def test_ambiguous_english_words_are_not_names() -> None:
+    assert found("Grace Period applies. Mark Up and Will Call. Frank Offer, Rose Garden.") == []

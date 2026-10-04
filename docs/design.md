@@ -22,7 +22,7 @@ segments ─▶ detectors ─▶ propagate ─▶ resolve overlaps ─▶ (revie
 ```
 
 - **Segments** are named strings (a paragraph, a cell, a whole .md file), so file adapters can plug in without touching the engine.
-- **Detectors** (`persona/detect`): glossary; validated identifiers (IBAN mod-97, codice fiscale and P.IVA checksums, e-mail); phones; profile/web URLs; heuristics (titled names, known first name + capitalised surname, `Nome:`/`Cognome:` labels, company suffixes, institutions such as `Liceo …`, street addresses). Labeled values (`C.F. …`, `P.IVA …`) are masked even with a wrong checksum, because a typo must not become a leak.
+- **Detectors** (`persona/detect`): glossary; labeled personal details (birth date after `nato a … il`/`Data di nascita`, `targa …`, `documento … n. …`); EU VAT numbers (country-prefixed formats, or any value after a `VAT`/`USt-IdNr`/`NIF`/`TVA` label); international phones; validated identifiers (IBAN mod-97, codice fiscale and P.IVA checksums, e-mail); phones; profile/web URLs; heuristics (titled names, known first name + capitalised surname, `Nome:`/`Cognome:` labels, company suffixes, institutions such as `Liceo …`, street addresses in IT, EN, DE, ES and FR styles). Foreign company suffixes (GmbH, AG, S.L., SARL, Ltd, B.V., …) and a small international first-name list (ambiguous English words like Mark, Will, Grace, Frank are excluded) cover mixed-language documents. Labeled values (`C.F. …`, `P.IVA …`) are masked even with a wrong checksum, because a typo must not become a leak.
 - **Propagation**: every detected value, plus every value in the vault, is searched across all segments (case/accent-insensitive, whole word). Bare surnames/first names of detected people ("Rossi" after "Mario Rossi") are masked case-sensitively, so "verdi" (green) survives "Anna Verdi".
 - **Names hidden in handles**: `zeno.cosini@…` or `linkedin.com/in/zeno-cosini` reveal that `Zeno` and `Cosini` are names, so they are masked wherever they appear capitalised; adjacent name parts are merged into one `PERSONA` block. Generic mailbox words (`ufficio`, `info`, `amministrazione`…) are excluded.
 - **Overlaps**: highest priority wins (validated > glossary > known value > pattern > heuristic > alias), then longest. A loser is not discarded: the part the winner does not cover is kept (trimmed of connectors), so a greedy heuristic match can never hide a value behind a neighbour. This fixed a real leak found with the corpus (`Giulia Marchetti di Tessitura Valdarno S.r.l.`).
@@ -55,7 +55,8 @@ Identity of an entry is the **exact surface string**. `ACME S.R.L.` and `Acme S.
 
 - Names outside the first-name list, or a lone first name, are not detected by rules (`test_names_not_in_the_first_name_list_or_alone_are_a_known_gap`).
 - Companies/institutions without a legal suffix or known keyword (`Officine Digitali Veronesi`, `Studioboost`) need the glossary.
-- The first-name list is a hand-written gazetteer of ~350 common Italian names: it will miss rarer or foreign names.
-- Cities are not masked, even though a city plus an employer can identify someone.
+- The first-name list is a hand-written gazetteer (~350 Italian + ~300 international names): it will miss rarer names, and it causes some over-masking (`Aurora Borealis`).
+- Cities are not masked (unless part of an address with a postcode), even though a city plus an employer can identify someone.
+- Unlabeled birth dates, plates and ID numbers are not detected (a lone `AB123CD` or `12/03/1980` is too ambiguous); the label is the signal.
 - PDFs are read as extracted text (single-column works well; multi-column order depends on the PDF); scanned PDFs are rejected (no OCR). No adapters yet for DOCX/XLSX. The previous prototype ignored headers, footers and document properties; the new adapters must include them and `verify` must run over all of it.
 - Original text that looks like a placeholder is ambiguous on restore.
