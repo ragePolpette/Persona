@@ -19,7 +19,14 @@ dependencies = [
 
 [project.optional-dependencies]
 pdf = ["pdfplumber>=0.11,<1.0"]
-dev = ["pytest>=8.3,<9.0", "pdfplumber>=0.11,<1.0", "reportlab>=4.2,<5.0", "python-docx>=1.1,<2.0", "openpyxl>=3.1,<4.0"]
+dev = [
+  "pytest>=8.3,<9.0",
+  "pdfplumber>=0.11,<1.0",
+  "reportlab>=4.2,<5.0",
+  "python-docx>=1.1,<2.0",
+  "openpyxl>=3.1,<4.0",
+  "ruff>=0.17,<0.18",
+]
 
 [project.scripts]
 persona = "persona.cli:app"
@@ -31,3 +38,18 @@ include = ["persona*"]
 minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# B008: typer declares options as default values by design.
+# E501: long regexes and test strings read better unwrapped; no formatter is enforced.
+# RUF001: the detectors deliberately match typographic characters such as ’ and –.
+ignore = ["B008", "E501", "RUF001"]
+
+[tool.ruff.lint.per-file-ignores]
+# the first-name gazetteer is a whitespace-separated word list on purpose
+"persona/detect/names.py" = ["SIM905"]

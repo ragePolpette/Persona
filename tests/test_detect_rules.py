@@ -222,3 +222,99 @@ def test_foreign_company_suffixes() -> None:
 
 def test_ambiguous_english_words_are_not_names() -> None:
     assert found("Grace Period applies. Mark Up and Will Call. Frank Offer, Rose Garden.") == []
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("Partecipanti: Rossi Mario, Bianchi Laura.", "Rossi Mario"),
+        ("Partecipanti: Rossi Mario, Bianchi Laura.", "Bianchi Laura"),
+        ("BIANCHI Laura, amministrazione", "BIANCHI Laura"),
+        ("Firma di Ferraro Maria Chiara in calce", "Ferraro Maria Chiara"),
+    ],
+)
+def test_surname_before_first_name(text: str, name: str) -> None:
+    assert ("PERSONA", name) in found(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Ciao Marco, grazie.", "Oggi Anna non c'è.", "Gentile Paola,", "Progetto Aurora", "Piazza San Marco", "Mario Rossi Luca"],
+)
+def test_greetings_and_common_words_are_not_surnames(text: str) -> None:
+    people = [value for kind, value in found(text) if kind == "PERSONA"]
+    assert all(value.split()[0] not in {"Ciao", "Oggi", "Gentile", "Progetto", "San", "Rossi"} for value in people), people
+
+
+@pytest.mark.parametrize(
+    ("text", "phone"),
+    [
+        ("Londra: 0044 20 7946 0958", "0044 20 7946 0958"),
+        ("Berlino 0049 30 1234567", "0049 30 1234567"),
+        ("New York, phone: (212) 555-0147", "(212) 555-0147"),
+        ("Tel. 415 555 0132 (ufficio)", "415 555 0132"),
+    ],
+)
+def test_foreign_phones_without_plus(text: str, phone: str) -> None:
+    assert ("TELEFONO", phone) in found(text)
+
+
+@pytest.mark.parametrize("text", ["ordine 0044 del 2026", "Tel. 01/03/2026", "cap 00144 Roma", "codice 004412"])
+def test_numbers_that_look_like_foreign_phones_are_left_alone(text: str) -> None:
+    assert [k for k, _ in found(text) if k == "TELEFONO"] == []
+
+
+def _reference_resolve(spans):
+    """The original quadratic algorithm, kept here to prove the faster one is equivalent."""
+    from persona.detect.base import _uncovered_parts
+
+    pending = list(spans)
+    kept = []
+    while pending:
+        pending.sort(key=lambda s: (-s.priority, -s.length, s.start))
+        span = pending.pop(0)
+        blockers = [other for other in kept if span.start < other.end and other.start < span.end]
+        if not blockers:
+            kept.append(span)
+            continue
+        pending.extend(_uncovered_parts(span, blockers))
+    return sorted(kept, key=lambda s: (s.start, s.end))
+
+
+def _random_spans(seed: int, count: int):
+    import random
+
+    from persona.detect.base import Span
+
+    rng = random.Random(seed)
+    text = " ".join(rng.choice(["Mario", "Rossi", "di", "Acme", "S.r.l.", "e", "Via", "Roma", "12"]) for _ in range(200))
+    spans = []
+    for _ in range(count):
+        start = rng.randrange(0, len(text) - 2)
+        end = min(len(text), start + rng.randrange(1, 40))
+        spans.append(Span(start, end, rng.choice(["PERSONA", "AZIENDA"]), text[start:end], "t", rng.choice([40, 50, 60, 80, 100])))
+    return spans
+
+
+@pytest.mark.parametrize("seed", range(25))
+def test_resolve_overlaps_matches_the_reference_algorithm(seed: int) -> None:
+    from persona.detect import resolve_overlaps
+
+    def key(spans):
+        return [(s.start, s.end, s.kind, s.priority, s.text) for s in spans]
+
+    assert key(resolve_overlaps(_random_spans(seed, 60))) == key(_reference_resolve(_random_spans(seed, 60)))
+
+
+def test_resolve_overlaps_scales_to_many_spans() -> None:
+    import time
+
+    from persona.detect import resolve_overlaps
+    from persona.detect.base import Span
+
+    spans = [Span(i * 10, i * 10 + 5, "PERSONA", "x" * 5, "t", 50) for i in range(20000)]
+    spans += [Span(i * 10 + 2, i * 10 + 8, "EMAIL", "x" * 6, "t", 100) for i in range(0, 20000, 2)]
+    began = time.perf_counter()
+    resolved = resolve_overlaps(spans)
+    assert time.perf_counter() - began < 2.0  # about 0.05 s; the quadratic version took close to a minute
+    assert len(resolved) == 20000  # every other PERSONA loses to an EMAIL; its 2-char remainders are dropped

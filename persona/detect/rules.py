@@ -8,7 +8,7 @@ NOT caught here. That is what the glossary (and later a NER/LLM layer) is for.
 from __future__ import annotations
 
 import re
-from typing import Iterator
+from collections.abc import Iterator
 
 from persona.detect.base import (
     PRIORITY_HEURISTIC,
@@ -18,6 +18,14 @@ from persona.detect.base import (
 )
 from persona.detect.names import is_first_name
 from persona.detect.validators import IBAN_LENGTHS, is_valid_cf, is_valid_iban, is_valid_piva
+from persona.detect.vocabulary import (
+    COMPANY_LEADING_STOP,
+    NAME_PARTICLES,
+    NAME_TRAILING_STOP,
+    NOT_LEADING_SURNAMES,
+    NOT_SURNAMES,
+    alternation,
+)
 
 _UP = "A-ZÀ-ÖØ-Þ"
 _LOW = "a-zà-öø-ÿ"
@@ -46,11 +54,18 @@ _PHONE = re.compile(
     r"(?:3\d{2}(?:[ .\-]?\d){6,7}|0\d{1,3}(?:[ .\-]?\d){5,8})(?![\w])"
 )
 
+_PHONE_INTL_00 = re.compile(r"(?<![\w.,/+\-])00(?!39)[1-9]\d{0,2}(?:[ .\-]?\(?\d{1,4}\)?){2,5}(?![\w])")
+_PHONE_LABELED = re.compile(
+    r"(?<![\w])(?i:tel|telefono|phone|telephone|cell|cellulare|mobile|fax)\.?[ \t]*(?:[:.][ \t]*)?"
+    r"(?P<number>\(?\d[\d \t().\-/]{5,22}\d)(?![\w])"
+)
+
 _THOUSANDS = re.compile(r"\d{1,3}(?:\.\d{3})+")
 
 # --- names, companies, addresses ----------------------------------------------------
 
-_PARTICLE = r"(?:(?:de|di|da|del|della|lo|la|van|von)[ \t]+|d['’])"
+_PARTICLES = alternation(NAME_PARTICLES)
+_PARTICLE = rf"(?:(?:{_PARTICLES})[ \t]+|d['’])"
 _NAME_WORD = rf"{_PARTICLE}?[{_UP}][{_UP}{_LOW}'’\-]+"
 _TITLE = (
     r"(?i:Sig\.ra|Sig\.na|Sig\.|Signora|Signor|Signore|Dott\.ssa|Dott\.|Dr\.ssa|Dr\.|Avv\.|"
@@ -60,17 +75,8 @@ _PERSON_WITH_TITLE = re.compile(
     rf"(?<![\w]){_TITLE}[ \t]+(?P<name>{_NAME_WORD}(?:[ \t]+{_NAME_WORD}){{0,2}})"
 )
 _CAPITALISED_CHAINS = re.compile(
-    rf"(?<![\w])[{_UP}][{_UP}{_LOW}'’\-]+(?:[ \t]+(?:(?:de|di|da|del|della|lo|la|van|von)[ \t]+)?[{_UP}][{_UP}{_LOW}'’\-]+)+"
+    rf"(?<![\w])[{_UP}][{_UP}{_LOW}'’\-]+(?:[ \t]+(?:(?:{_PARTICLES})[ \t]+)?[{_UP}][{_UP}{_LOW}'’\-]+)+"
 )
-_SURNAME_PARTICLES = {"de", "di", "da", "del", "della", "dei", "degli", "lo", "la", "van", "von"}
-_NOT_SURNAMES = {
-    "il", "lo", "la", "le", "gli", "un", "una", "con", "per", "tra", "fra", "che", "del", "della",
-    "dei", "delle", "srl", "spa", "snc", "sas", "s.r.l.", "s.p.a.", "ha", "è",
-}  # fmt: skip
-_NAME_TRAILING_STOP = {
-    "via", "viale", "piazza", "corso", "largo", "strada", "tel", "email", "cod", "cf", "piva",
-    "spett", "nato", "nata", "residente", "domiciliato", "domiciliata",
-}  # fmt: skip
 
 _COMPANY_SUFFIX = (
     r"(?:S\.r\.l\.s?|S\.R\.L\.|SRL|Srl|S\.p\.A\.|S\.P\.A\.|S\.p\.a\.|SPA|SpA|S\.n\.c\.|S\.N\.C\.|"
@@ -83,13 +89,6 @@ _COMPANY = re.compile(
     rf"(?<![\w])(?:(?:{_COMPANY_CAP}|{_COMPANY_CONNECTOR})[ \t]+){{0,6}}{_COMPANY_CAP}[ \t]+"
     rf"{_COMPANY_SUFFIX}(?![\w])"
 )
-_COMPANY_LEADING_STOP = {
-    "il", "lo", "la", "le", "gli", "i", "un", "una", "uno", "con", "da", "di", "del", "della",
-    "dei", "degli", "delle", "dello", "dal", "dalla", "in", "nel", "nella", "per", "tra", "fra",
-    "su", "sul", "sulla", "a", "al", "alla", "allo", "ai", "agli", "e", "ed", "o", "presso",
-    "spett.le", "spett.", "egr.", "egregio", "gentile", "ditta", "società", "azienda", "cliente",
-    "fornitore", "sede", "contratto", "fattura", "ordine", "&", "and", "de",
-}  # fmt: skip
 
 _STREET_TYPE = (
     r"(?i:Via|Viale|V\.le|Piazza|P\.zza|Piazzale|Corso|C\.so|Largo|Vicolo|Strada|Località|Loc\.)"
@@ -124,6 +123,7 @@ _VAT_LABELED = re.compile(
 )
 
 _DATE = r"\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}"
+_DATE_ONLY = re.compile(_DATE)
 _BIRTH_DATE = re.compile(
     rf"(?:(?i:nato|nata)[ \t]+(?i:a|il)[^,\n]{{0,45}}?[ \t](?i:il)[ \t]+|(?i:data[ \t]+di[ \t]+nascita)[ \t]*[:.]?[ \t]*)({_DATE})"
 )
@@ -153,10 +153,11 @@ _FRENCH_ADDRESS = re.compile(
     rf"(?:(?:de|du|des|la|le|l')[ \t]*)*{_ADDR_NAME_WORD}(?:[ \t]+{_ADDR_NAME_WORD}){{0,3}}{_POSTCODE5_CITY}?"
 )
 
-_PROFILE_HOSTS = (
-    r"linkedin\.com|github\.com|gitlab\.com|bitbucket\.org|twitter\.com|x\.com|facebook\.com|"
-    r"instagram\.com|tiktok\.com|youtube\.com|t\.me"
-)
+PROFILE_HOSTS = (
+    "linkedin.com", "github.com", "gitlab.com", "bitbucket.org", "twitter.com", "x.com", "facebook.com",
+    "instagram.com", "tiktok.com", "youtube.com", "t.me",
+)  # fmt: skip
+_PROFILE_HOSTS = "|".join(re.escape(host) for host in PROFILE_HOSTS)
 _URL = re.compile(
     rf"(?<![\w@.])(?:(?:https?://|www\.)[^\s<>()\[\]]+|(?:[a-z]{{2,3}}\.)?(?:{_PROFILE_HOSTS})/[^\s<>()\[\]]+)",
     re.IGNORECASE,
@@ -177,8 +178,6 @@ _INSTITUTION_WORD = rf"(?:[{_UP}][\w{_UP}{_LOW}'’.\-]*|(?:di|del|della|dei|deg
 _INSTITUTION_NAME = re.compile(
     rf"(?<![\w]){_INSTITUTION}(?:[ \t]+{_INSTITUTION_WORD}){{1,5}}(?<![ \t])"
 )
-
-_GENERIC_CAP_WORDS = {"srl", "spa", "snc", "sas"}
 
 
 class RuleDetector:
@@ -268,6 +267,17 @@ class RuleDetector:
             digits = re.sub(r"\D", "", match.group(0))
             if 9 <= len(digits) <= 15:
                 yield _span(match.start(), match.end(), "TELEFONO", text, "rules:phone-intl", PRIORITY_PATTERN)
+        for match in _PHONE_INTL_00.finditer(text):
+            digits = re.sub(r"\D", "", match.group(0))
+            if 11 <= len(digits) <= 17:
+                yield _span(match.start(), match.end(), "TELEFONO", text, "rules:phone-intl-00", PRIORITY_PATTERN)
+        for match in _PHONE_LABELED.finditer(text):
+            start, end = match.span("number")
+            while text[end - 1] in " \t":
+                end -= 1
+            digits = re.sub(r"\D", "", text[start:end])
+            if 7 <= len(digits) <= 15 and not _DATE_ONLY.fullmatch(text[start:end]):
+                yield _span(start, end, "TELEFONO", text, "rules:phone-labeled", PRIORITY_PATTERN)
 
     def _foreign_vat(self, text: str) -> Iterator[Span]:
         seen: set[tuple[int, int]] = set()
@@ -296,7 +306,7 @@ class RuleDetector:
         for match in _PERSON_WITH_TITLE.finditer(text):
             start, end = match.start("name"), match.end("name")
             words = list(re.finditer(r"\S+", text[start:end]))
-            while words and words[-1].group(0).lower().strip(".,") in _NAME_TRAILING_STOP:
+            while words and words[-1].group(0).lower().strip(".,") in NAME_TRAILING_STOP:
                 words.pop()
             if not words:
                 continue
@@ -320,6 +330,7 @@ class RuleDetector:
         for chain in _CAPITALISED_CHAINS.finditer(text):
             words = list(re.finditer(r"\S+", chain.group(0)))
             index = 0
+            free = 0  # words before this index already belong to a detected name
             while index < len(words):
                 word = words[index].group(0)
                 if not (word[0].isupper() and is_first_name(word)):
@@ -330,19 +341,24 @@ class RuleDetector:
                 while index + taken < len(words) and taken < 4:
                     following = words[index + taken].group(0)
                     bare = following.lower().strip(".,")
-                    if bare in _NAME_TRAILING_STOP or bare in _NOT_SURNAMES:
+                    if bare in NAME_TRAILING_STOP or bare in NOT_SURNAMES:
                         break
-                    after_particle = words[index + taken - 1].group(0).lower() in _SURNAME_PARTICLES
+                    after_particle = words[index + taken - 1].group(0).lower() in NAME_PARTICLES
                     if is_first_name(following) and following[0].isupper() and not after_particle:
                         if has_surname:
                             break
                     else:
                         has_surname = True
                     taken += 1
-                if taken >= 2 and has_surname:
-                    start = chain.start() + words[index].start()
+                first = index
+                if not has_surname and index > free and _is_leading_surname(words[index - 1].group(0)):
+                    first, has_surname = index - 1, True  # "Rossi Mario": surname written first
+                if has_surname and index + taken - first >= 2:
+                    start = chain.start() + words[first].start()
                     end = chain.start() + words[index + taken - 1].end()
-                    yield _span(start, end, "PERSONA", text, "rules:first-name", PRIORITY_HEURISTIC)
+                    source = "rules:first-name" if first == index else "rules:surname-first"
+                    yield _span(start, end, "PERSONA", text, source, PRIORITY_HEURISTIC)
+                    free = index + taken
                 index += max(taken, 1)
 
     def _institutions(self, text: str) -> Iterator[Span]:
@@ -353,7 +369,7 @@ class RuleDetector:
         for match in _COMPANY.finditer(text):
             start, end = match.start(), match.end()
             tokens = list(re.finditer(r"\S+", text[start:end]))
-            while len(tokens) > 2 and tokens[0].group(0).lower() in _COMPANY_LEADING_STOP:
+            while len(tokens) > 2 and tokens[0].group(0).lower() in COMPANY_LEADING_STOP:
                 tokens.pop(0)
             start += tokens[0].start()
             yield _span(start, end, "AZIENDA", text, "rules:company-suffix", PRIORITY_HEURISTIC)
@@ -371,6 +387,21 @@ class RuleDetector:
     def _addresses(self, text: str) -> Iterator[Span]:
         for match in _ADDRESS.finditer(text):
             yield _span(match.start(), match.end(), "INDIRIZZO", text, "rules:address", PRIORITY_HEURISTIC)
+
+
+def _is_leading_surname(word: str) -> bool:
+    bare = word.strip(".,;:'’")
+    lowered = bare.lower()
+    return (
+        len(bare) >= 3
+        and bare[0].isupper()
+        and not is_first_name(bare)
+        and lowered not in NOT_LEADING_SURNAMES
+        and lowered not in NOT_SURNAMES
+        and lowered not in NAME_TRAILING_STOP
+        and lowered not in NAME_PARTICLES
+        and lowered not in COMPANY_LEADING_STOP
+    )
 
 
 def _span(start: int, end: int, kind: str, text: str, source: str, priority: int) -> Span:

@@ -7,8 +7,9 @@ Office files (DOCX, XLSX) are edited at the XML level inside the package; see `o
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping, Protocol, Sequence
+from typing import Protocol
 
 from persona.edits import Edit, apply_edits
 from persona.engine import Segment
@@ -19,7 +20,7 @@ from persona.office_xlsx import XlsxDocument
 TEXT_SUFFIXES = (".txt", ".md")
 SUPPORTED_SUFFIXES = (*TEXT_SUFFIXES, ".pdf", ".docx", ".xlsx")
 
-__all__ = ["Document", "DocxDocument", "TextDocument", "XlsxDocument", "open_document"]
+__all__ = ["Document", "DocxDocument", "TextDocument", "XlsxDocument", "decode_text", "open_document"]
 
 
 class Document(Protocol):
@@ -34,7 +35,8 @@ class Document(Protocol):
 def open_document(path: Path) -> Document:
     suffix = path.suffix.lower()
     if suffix in TEXT_SUFFIXES:
-        return TextDocument(path, _read_text_file(path), output_suffix=path.suffix)
+        text, bom = _read_text_file(path)
+        return TextDocument(path, text, output_suffix=path.suffix, bom=bom)
     if suffix == ".pdf":
         return TextDocument(path, _read_pdf(path), output_suffix=".txt")
     if suffix == ".docx":
@@ -50,21 +52,45 @@ def open_document(path: Path) -> Document:
 
 
 class TextDocument:
-    def __init__(self, path: Path, text: str, *, output_suffix: str) -> None:
+    """Line endings are kept as they are (no newline translation) and a UTF-8 BOM is written back."""
+
+    def __init__(self, path: Path, text: str, *, output_suffix: str, bom: bool = False) -> None:
         self.path = path
         self.text = text
         self.output_suffix = output_suffix
+        self.bom = bom
         self.segments = [Segment("text", text)]
         self.warnings: list[str] = []
 
+    def render(self, edits: Mapping[str, Sequence[Edit]]) -> str:
+        return apply_edits(self.text, list(edits.get("text", [])))
+
     def write(self, out: Path, edits: Mapping[str, Sequence[Edit]]) -> None:
-        out.write_text(apply_edits(self.text, list(edits.get("text", []))), encoding="utf-8")
+        with open(out, "w", encoding="utf-8-sig" if self.bom else "utf-8", newline="") as handle:
+            handle.write(self.render(edits))
 
 
-def _read_text_file(path: Path) -> str:
+def decode_text(data: bytes) -> tuple[str, bool]:
+    """(text, had a UTF-8 BOM). UTF-8 first, then Windows-1252, the usual encoding of legacy Italian files."""
+    bom = data.startswith(b"\xef\xbb\xbf")
     try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
+        return data.decode("utf-8-sig"), bom
+    except UnicodeDecodeError:
+        pass
+    try:
+        return data.decode("cp1252"), False
+    except UnicodeDecodeError as exc:
+        raise InputError(f"Unknown text encoding (not UTF-8 or Windows-1252): {exc}") from exc
+
+
+def _read_text_file(path: Path) -> tuple[str, bool]:
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise InputError(f"Cannot read {path}: {exc}") from exc
+    try:
+        return decode_text(data)
+    except InputError as exc:
         raise InputError(f"Cannot read {path}: {exc}") from exc
 
 

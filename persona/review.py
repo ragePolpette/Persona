@@ -8,9 +8,8 @@ Prompting is injected, so the flow is testable and a UI can reuse it.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from persona.engine import Analysis
 from persona.placeholders import KINDS

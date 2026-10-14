@@ -1,7 +1,8 @@
 """Per-project encrypted vault: placeholder <-> original value, plus the user's glossary.
 
 One vault per project/client, so the same value gets the same placeholder in every
-document of that project. The whole file is AES-256-GCM encrypted with an Argon2id-derived key.
+document of that project. The whole file is AES-256-GCM encrypted with an Argon2id-derived key;
+from format version 2 the version, KDF parameters and salt are authenticated as associated data.
 """
 
 from __future__ import annotations
@@ -23,16 +24,28 @@ from persona.exceptions import InputError, VaultError, WrongPasswordError
 from persona.placeholders import KINDS, format_placeholder
 from persona.textnorm import fold
 
-VAULT_VERSION = 1
-_AAD = b"persona-vault-v1"
+VAULT_VERSION = 2
+SUPPORTED_VERSIONS = (1, 2)
+_LEGACY_AAD = b"persona-vault-v1"
+BACKUPS = 3
+
+# Upper bounds for parameters read from a vault file: a crafted file must not make opening it
+# allocate gigabytes or run for minutes before the password is even checked.
+MAX_TIME_COST = 10
+MAX_MEMORY_KIB = 1024 * 1024
+MAX_PARALLELISM = 8
+KEY_LENGTH = 32
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Argon2Params:
     time_cost: int = 3
     memory_cost_kib: int = 65536
     parallelism: int = 4
-    hash_len: int = 32
+    hash_len: int = KEY_LENGTH
+
+
+DEFAULT_PARAMS = Argon2Params()
 
 
 @dataclass(slots=True)
@@ -73,18 +86,18 @@ class Vault:
     # -- lifecycle -----------------------------------------------------------------
 
     @classmethod
-    def create(cls, path: Path, password: str, params: Argon2Params | None = None) -> "Vault":
+    def create(cls, path: Path, password: str, params: Argon2Params | None = None) -> Vault:
         path = Path(path)
         if path.exists():
             raise VaultError(f"Vault already exists: {path}")
-        params = params or Argon2Params()
+        params = _checked(params or DEFAULT_PARAMS)
         salt = os.urandom(16)
         vault = cls(path, _derive_key(password, salt, params), salt, params)
         vault.save()
         return vault
 
     @classmethod
-    def open(cls, path: Path, password: str) -> "Vault":
+    def open(cls, path: Path, password: str) -> Vault:
         path = Path(path)
         try:
             envelope = json.loads(path.read_text(encoding="utf-8"))
@@ -93,26 +106,34 @@ class Vault:
         except (OSError, json.JSONDecodeError) as exc:
             raise VaultError(f"Unreadable vault file: {path}") from exc
         try:
-            if envelope["version"] != VAULT_VERSION:
-                raise VaultError(f"Unsupported vault version: {envelope['version']!r}")
+            version = envelope["version"]
+            if version not in SUPPORTED_VERSIONS or isinstance(version, bool):
+                raise VaultError(f"Unsupported vault version: {version!r}")
             params = Argon2Params(**envelope["kdf"]["params"])
             salt = _b64d(envelope["kdf"]["salt"])
             nonce = _b64d(envelope["nonce"])
             ciphertext = _b64d(envelope["ciphertext"])
         except (KeyError, TypeError, ValueError, binascii.Error) as exc:
             raise VaultError("Malformed vault envelope.") from exc
+        _checked(params)
         key = _derive_key(password, salt, params)
         try:
-            plaintext = AESGCM(key).decrypt(nonce, ciphertext, _AAD)
+            plaintext = AESGCM(key).decrypt(nonce, ciphertext, _aad(version, params, salt))
         except InvalidTag as exc:
             raise WrongPasswordError("Wrong password, or the vault file was modified.") from exc
         vault = cls(path, key, salt, params)
         vault._load(plaintext)
         return vault
 
-    def save(self) -> None:
+    def save(self, *, backup: bool = True) -> None:
+        """Write the vault atomically, always in the current format.
+
+        The previous file is kept as `<name>.bak` (older ones as `.bak.1`, `.bak.2`), because a
+        lost vault means anonymized documents that can never be restored.
+        """
         nonce = os.urandom(12)
-        ciphertext = AESGCM(self._key).encrypt(nonce, self._dump(), _AAD)
+        aad = _aad(VAULT_VERSION, self._params, self._salt)
+        ciphertext = AESGCM(self._key).encrypt(nonce, self._dump(), aad)
         envelope = {
             "version": VAULT_VERSION,
             "kdf": {"params": vars_of(self._params), "salt": _b64e(self._salt)},
@@ -120,15 +141,37 @@ class Vault:
             "ciphertext": _b64e(ciphertext),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(dir=self.path.parent, prefix=".vault-", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(envelope, handle)
-            os.chmod(tmp_name, 0o600)
-            os.replace(tmp_name, self.path)
-        except BaseException:
-            Path(tmp_name).unlink(missing_ok=True)
-            raise
+        if backup and self.path.exists():
+            self._rotate_backups()
+        _atomic_write(self.path, json.dumps(envelope).encode("utf-8"))
+
+    def backup_paths(self) -> list[Path]:
+        """Newest first."""
+        first = self.path.with_name(f"{self.path.name}.bak")
+        return [first, *(first.with_name(f"{first.name}.{n}") for n in range(1, BACKUPS))]
+
+    def _rotate_backups(self) -> None:
+        paths = self.backup_paths()
+        for older, newer in zip(reversed(paths[1:]), reversed(paths[:-1]), strict=True):
+            if newer.exists():
+                os.replace(newer, older)
+        _atomic_write(paths[0], self.path.read_bytes())
+
+    def rekey(self, new_password: str, params: Argon2Params | None = None) -> list[Path]:
+        """Re-encrypt under a new password (fresh salt). Returns the backups that were deleted.
+
+        Backups are copies encrypted with the old password, so they are removed: otherwise the
+        old password would keep opening the vault's contents.
+        """
+        params = _checked(params or DEFAULT_PARAMS)
+        salt = os.urandom(16)
+        key = _derive_key(new_password, salt, params)
+        self._key, self._salt, self._params = key, salt, params
+        self.save(backup=False)
+        removed = [path for path in self.backup_paths() if path.exists()]
+        for path in removed:
+            path.unlink()
+        return removed
 
     # -- entries -------------------------------------------------------------------
 
@@ -243,6 +286,44 @@ def vars_of(params: Argon2Params) -> dict[str, int]:
         "parallelism": params.parallelism,
         "hash_len": params.hash_len,
     }
+
+
+def _checked(params: Argon2Params) -> Argon2Params:
+    values = vars_of(params)
+    if not all(isinstance(value, int) and not isinstance(value, bool) for value in values.values()):
+        raise VaultError(f"Vault KDF parameters must be integers: {values}")
+    problems = []
+    if not 1 <= params.time_cost <= MAX_TIME_COST:
+        problems.append(f"time_cost must be 1..{MAX_TIME_COST}")
+    if not 1 <= params.parallelism <= MAX_PARALLELISM:
+        problems.append(f"parallelism must be 1..{MAX_PARALLELISM}")
+    if not 8 * max(params.parallelism, 1) <= params.memory_cost_kib <= MAX_MEMORY_KIB:
+        problems.append(f"memory_cost_kib must be 8*parallelism..{MAX_MEMORY_KIB} (1 GiB)")
+    if params.hash_len != KEY_LENGTH:
+        problems.append(f"hash_len must be {KEY_LENGTH}")
+    if problems:
+        raise VaultError(f"Vault KDF parameters out of range ({'; '.join(problems)}): {values}")
+    return params
+
+
+def _aad(version: int, params: Argon2Params, salt: bytes) -> bytes:
+    """Associated data. Version 1 used a constant; version 2 binds the whole envelope header."""
+    if version == 1:
+        return _LEGACY_AAD
+    header = {"version": version, "kdf": {"params": vars_of(params), "salt": _b64e(salt)}}
+    return b"persona-vault-v2:" + json.dumps(header, sort_keys=True, separators=(",", ":")).encode("ascii")
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".vault-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        os.chmod(tmp_name, 0o600)
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
 
 
 def _derive_key(password: str, salt: bytes, params: Argon2Params) -> bytes:

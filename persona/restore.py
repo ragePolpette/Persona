@@ -7,8 +7,8 @@ Placeholders are found tolerantly; anything the AI invented or dropped is report
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
 
 from persona.edits import Edit, apply_edits
 from persona.engine import Segment

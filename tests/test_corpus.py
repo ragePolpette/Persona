@@ -17,7 +17,7 @@ from persona.engine import anonymize_text, verify
 from persona.restore import placeholders_in, restore_text
 from persona.textnorm import FoldedText
 from persona.vault import Vault
-from tests.conftest import CorpusDoc, FAST_KDF, load_corpus
+from tests.conftest import FAST_KDF, CorpusDoc, load_corpus
 
 CORPUS = load_corpus()
 STRUCTURED = {"EMAIL", "TELEFONO", "IBAN", "CF", "PIVA", "INDIRIZZO", "URL", "ALTRO"}
@@ -64,11 +64,11 @@ def test_recall_without_glossary(tmp_path, capsys) -> None:
         hit, total = per_kind[kind]
         assert hit == total, f"{kind}: {hit}/{total} (missed: {[m for m in missed]})"
     overall = sum(hit for hit, _ in per_kind.values()), sum(total for _, total in per_kind.values())
-    assert overall[0] >= 140, f"overall recall regressed: {overall}"  # ratchet: 140/146 today
+    assert overall[0] >= 146, f"overall recall regressed: {overall}"  # ratchet: 146/152 today
 
 
 def test_recall_with_glossary_is_complete(tmp_path) -> None:
-    per_kind, missed = _recall(tmp_path, glossary=True)
+    _, missed = _recall(tmp_path, glossary=True)
     assert missed == []
 
 

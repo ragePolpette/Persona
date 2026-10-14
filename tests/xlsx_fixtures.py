@@ -74,7 +74,7 @@ def _inject(path: Path, with_chart_and_drawing: bool) -> None:
         '<si><r><rPr><b/></rPr><t xml:space="preserve">Mario </t></r><r><t>Rossi</t></r></si>'
         '<si><t>Contratto Giulia Marchetti</t><rPh sb="0" eb="1"><t>ジュリア</t></rPh></si>'
         "</sst>"
-    ).encode("utf-8")
+    ).encode()
     workbook_rels = entries["xl/_rels/workbook.xml.rels"].decode("utf-8").replace(
         "</Relationships>",
         '<Relationship Id="rIdSS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>',
@@ -87,17 +87,17 @@ def _inject(path: Path, with_chart_and_drawing: bool) -> None:
     entries["[Content_Types].xml"] = content_types.encode("utf-8")
 
     entries["xl/threadedComments/threadedComment1.xml"] = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<ThreadedComments xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments">'
-        '<threadedComment ref="A2" personId="{1}" id="{2}"><text>Sentire Mario Rossi</text></threadedComment>'
-        "</ThreadedComments>"
-    ).encode("utf-8")
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<ThreadedComments xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments">'
+        b'<threadedComment ref="A2" personId="{1}" id="{2}"><text>Sentire Mario Rossi</text></threadedComment>'
+        b"</ThreadedComments>"
+    )
     entries["xl/persons/person.xml"] = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<personList xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments">'
-        '<person displayName="Mario Rossi" id="{1}" userId="mario.rossi@example.test" providerId="AD"/>'
-        "</personList>"
-    ).encode("utf-8")
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<personList xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments">'
+        b'<person displayName="Mario Rossi" id="{1}" userId="mario.rossi@example.test" providerId="AD"/>'
+        b"</personList>"
+    )
 
     entries["docProps/thumbnail.jpeg"] = b"\xff\xd8\xff thumbnail"
     root_rels = entries["_rels/.rels"].decode("utf-8").replace(

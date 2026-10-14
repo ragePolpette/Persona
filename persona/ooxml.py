@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import re
 import zipfile
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
 
 from lxml import etree
 
@@ -165,6 +165,9 @@ class OoxmlPackage:
     def extra_warnings(self) -> None:
         pass
 
+    def assign_column_kinds(self) -> None:
+        pass
+
     def properties_transform(self) -> Callable[[str], str] | None:
         return None
 
@@ -180,7 +183,7 @@ class OoxmlPackage:
                     )
                 for name in self._names:
                     if RELS_PARTS.match(name) or name in DOC_PROPS or self.wants_part(name):
-                        self._parts[name] = Part(name, etree.fromstring(archive.read(name)))
+                        self._parts[name] = Part(name, parse_xml(archive.read(name), f"{self.path.name}:{name}"))
                 self._raw = {
                     name: archive.read(name)
                     for name in self._names
@@ -202,6 +205,7 @@ class OoxmlPackage:
                 self._collect_properties(part)
             else:
                 self.collect(part)
+        self.assign_column_kinds()
         self._collect_warnings()
         self.extra_warnings()
 
@@ -289,6 +293,19 @@ class OoxmlPackage:
                 if str(relationship.get("Type", "")).endswith("/metadata/thumbnail"):
                     self._dropped.add(relationship.get("Target", "").lstrip("/"))
                     root_rels.root.remove(relationship)
+
+
+def parse_xml(data: bytes, where: str) -> etree._Element:
+    """Parse an XML part without resolving entities, loading DTDs or touching the network.
+
+    OOXML parts never need a DTD (Office itself refuses them), so one is treated as hostile.
+    """
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False)
+    root = etree.fromstring(data, parser)
+    docinfo = root.getroottree().docinfo
+    if docinfo.doctype or docinfo.internalDTD is not None:
+        raise InputError(f"{where} declares a DTD, which Office files never contain: refusing to process it.")
+    return root
 
 
 def serialize(root: etree._Element) -> bytes:

@@ -6,9 +6,9 @@ import pytest
 from typer.testing import CliRunner
 
 from persona import cli
-from persona.engine import Segment, analyze, anonymize_text, apply, verify
+from persona.engine import Segment, analyze, anonymize_text, verify
 from persona.review import group_spans, run_review
-from persona.vault import Argon2Params, Vault
+from persona.vault import Vault
 
 TEXT = "Mandare a mario.rossi@example.test o a info@acme.example. Il progetto Aurora Borealis parte domani."
 
@@ -122,10 +122,7 @@ def test_glossary_remove(vault: Vault) -> None:
 
 
 @pytest.fixture
-def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("PERSONA_HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("PERSONA_PASSWORD", "pw")
-    monkeypatch.setattr(Argon2Params.__init__, "__defaults__", (1, 8, 1, 32))
+def project(tmp_path: Path, cli_env: Path) -> Path:
     assert CliRunner().invoke(cli.app, ["init", "-p", "r"]).exit_code == 0
     return tmp_path
 

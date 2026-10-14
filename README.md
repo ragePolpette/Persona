@@ -21,7 +21,8 @@ Supported inputs: `.docx`, `.xlsx`, `.txt`, `.md` and text-based `.pdf` (read as
 
 - **Short, readable placeholders** (`[PERSONA_1]`, `[AZIENDA_2]`, `[IBAN_1]`): the kind tells the AI what the thing is, so it can write around it naturally.
 - **One vault per project**: the same value is always the same placeholder, across all documents of a client. The vault is a single AES-256-GCM file (Argon2id key) holding the mapping and your glossary.
-- **Detection in layers**: your glossary (highest recall: you know your clients), checksum-validated identifiers (IBAN, codice fiscale, P.IVA, e-mail), phone numbers, profile/web URLs, and heuristics for names (titles, a list of common Italian first names, labels like `Cognome:`, names hidden in e-mail addresses and profile URLs), company suffixes, institutions (`Liceo …`, `Cooperativa …`) and street addresses. A value found once is masked everywhere, including in later documents of the project.
+- **Detection in layers**: your glossary (highest recall: you know your clients), checksum-validated identifiers (IBAN, codice fiscale, P.IVA, e-mail), phone numbers, profile/web URLs, and heuristics for names (titles, a list of common Italian first names in either order, `Mario Rossi` or `Rossi Mario`, labels like `Cognome:`, names hidden in e-mail addresses and profile URLs such as LinkedIn or GitHub), company suffixes, institutions (`Liceo …`, `Cooperativa …`) and street addresses. A value found once is masked everywhere, including in later documents of the project.
+- **Column headers in tables**: in XLSX sheets and DOCX tables, every non-empty cell below a header such as `Nome`, `Cognome`, `Cliente`, `Email`, `Telefono`, `Codice Fiscale`, `P.IVA` or `Indirizzo` (or the English equivalents `Name`, `Customer`, `Phone`, `Tax code`, `VAT`, `Address`, ...) is masked whole with the matching kind, even when no detector recognises the value.
 - **Review before masking** (`--review`): each distinct value is shown with its context; you can mask it, skip it this time, or mark it *never mask* (kept in the vault, so the same false positive never returns, see `persona allow`). At the end you can type names the detectors missed and they go into the glossary. `--exclude TEXT` skips a value for one run. Values you chose to leave in do not trigger the safety check.
 - **Safety check before sharing**: the file that was actually written is re-opened and re-scanned for every known value and for anything the detectors still find. If something is left, nothing is written (`--force` overrides).
 - **DOCX goes deep**: body, tables, headers, footers, footnotes/endnotes, comments, text boxes, tracked deletions, field codes (`HYPERLINK "mailto:…"`), hyperlink targets, image alt text, custom XML and document properties are all analysed. Formatting is kept: a placeholder inherits the run it starts in, even when the name was split across differently formatted runs. Who-made-the-file traces are scrubbed: author / last-modified-by / company, comment and revision authors, the page thumbnail and the people list. Scrubbed fields are not restored.
@@ -61,6 +62,7 @@ persona restore answer.md --sent contract.anon.md -p acme   # writes answer.rest
 ## Configuration
 
 - `PERSONA_PASSWORD`: vault password. If unset, it is asked interactively.
+- `PERSONA_NEW_PASSWORD`: new password for `persona rekey`. If unset, it is asked interactively.
 - `PERSONA_HOME`: base directory for vaults. Default: `~/.persona`. Vaults are stored in `<PERSONA_HOME>/projects/<project>.vault`.
 - `--vault PATH`: use an explicit vault file instead of `--project`.
 
@@ -73,20 +75,52 @@ persona anonymize cv.pdf -p acme        # cv.anon.txt
 persona verify file.md -p acme          # check a file for sensitive data before sharing
 persona allow add "Aurora Borealis" -p acme   # never mask this value
 persona glossary list -p acme
+persona rekey -p acme                   # change the vault password
 ```
 
-Run `persona --help` and `persona <command> --help` for all options (`--out`, `--exclude`, `--force`, `--review`, `--dry-run`).
+Batch and pipes:
+
+```bash
+persona anonymize contracts/ -p acme                    # every supported file in the folder
+persona anonymize contracts/ -p acme -r -o shared/      # include subfolders, mirror them under shared/
+persona anonymize contracts/ -p acme -r --json          # machine-readable report on standard output
+cat note.txt | persona anonymize --stdin -p acme > note.anon.txt
+persona anonymize note.md -p acme --stdout              # text inputs only (.txt, .md, .pdf)
+```
+
+In a directory, hidden files and earlier outputs (`*.anon.*`, `*.restored.*`) are skipped, unsupported files are reported as skipped, and a file that fails the safety check does not stop the others. The exit code is 2 if any file was blocked by the safety check, 1 if any file could not be processed, 0 otherwise. The `--json` report contains paths, statuses and counts only, never the detected values; run without `--json` to see them. `--review` cannot be combined with `--stdin` or `--json`, and is ignored (with a warning) together with `--dry-run`.
+
+Run `persona --help` and `persona <command> --help` for all options (`--out`, `--exclude`, `--force`, `--review`, `--dry-run`, `--recursive`, `--json`, `--stdin`, `--stdout`).
+
+Text files are read as UTF-8 (a BOM is accepted and written back) or, failing that, as Windows-1252. Line endings are preserved as they are. Output is always UTF-8.
+
+## Python API
+
+`anonymize_text`, `restore_text`, `verify` and `Vault` are the stable Python API:
+
+```python
+from persona import Vault, anonymize_text, restore_text, verify
+
+vault = Vault.create("acme.vault", "password")        # or Vault.open("acme.vault", "password")
+censored, result = anonymize_text("Il Dott. Mario Rossi scrive a m.rossi@acme.example", vault)
+vault.save()                                          # store the mapping before sharing `censored`
+assert verify({"text": censored}, vault) == []        # nothing sensitive left
+
+report = restore_text("Risposta per [PERSONA_1].", vault)
+print(report.text)                                    # "Risposta per Mario Rossi."
+print(report.invented, report.missing, report.altered)
+```
 
 ## Detection results
 
-Measured on the synthetic corpus in `tests/corpus` (15 documents, 146 sensitive values; run `pytest tests/test_corpus.py -s`). Eight documents are Italian business texts (contracts, e-mail, minutes, invoice, CV…); six are a "hard set" with e-mail threads, foreign invoices and addresses (DE/ES/UK), EU VAT numbers, a declaration with birth date / plate / ID number, minutes with surnames only, an English contract.
+Measured on the synthetic corpus in `tests/corpus` (16 documents, 152 sensitive values; run `pytest tests/test_corpus.py -s`). Nine documents are Italian business texts (contracts, e-mail, minutes, invoice, CV…); seven are a "hard set" with e-mail threads, foreign invoices and addresses (DE/ES/UK), EU VAT numbers, a declaration with birth date / plate / ID number, minutes with surnames only, an English contract, a participant list with surname-first names and foreign phone numbers written without `+`.
 
 | | Without glossary | With glossary |
 |---|---|---|
-| E-mail, phone (IT and international), IBAN, codice fiscale, VAT/P.IVA, addresses (IT/DE/ES/FR/UK), URLs, birth date / plate / ID number | 82/82 | 82/82 |
+| E-mail, phone (IT and international), IBAN, codice fiscale, VAT/P.IVA, addresses (IT/DE/ES/FR/UK), URLs, birth date / plate / ID number | 84/84 | 84/84 |
 | Companies and institutions | 24/26 | 26/26 |
-| People | 34/38 | 38/38 |
-| **Total** | **140/146** | **146/146** |
+| People | 38/42 | 42/42 |
+| **Total** | **146/152** | **152/152** |
 
 What still needs the glossary: companies and schools without a legal suffix or known keyword (`Officine Digitali Veronesi`), and a bare first name with no surname beside it (`Ciao Francesca`) unless the full name appears elsewhere in the same project. Cities are deliberately **not** masked unless they are part of an address with a postcode.
 
@@ -114,9 +148,10 @@ The vault is encrypted at rest, and `anonymize` re-reads the written file and ch
 pip install -e ".[dev]"
 pytest
 pytest tests/test_corpus.py -s
+ruff check .
 ```
 
-No linter is configured. See [CONTRIBUTING.md](CONTRIBUTING.md).
+CI runs `ruff check` and the test suite on Linux and Windows. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Project status
 

@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import posixpath
 import re
+from collections import defaultdict
 
 from lxml import etree
 
+from persona.detect.columns import header_kind
 from persona.ooxml import OoxmlPackage, Part, StreamLocator, strip_brackets
 
 _S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -38,6 +40,8 @@ _PARTS = re.compile(
 )
 _HEADER_FOOTER = ("oddHeader", "oddFooter", "evenHeader", "evenFooter", "firstHeader", "firstFooter")
 _BIG_INTEGER = re.compile(r"^\d{9,12}$")
+_CELL_REF = re.compile(r"^([A-Z]{1,3})(\d+)$")
+_HEADER_SEARCH_ROWS = 20
 
 
 class _StringLocator(StreamLocator):
@@ -74,6 +78,7 @@ class XlsxDocument(OoxmlPackage):
 
     def __init__(self, path):
         self._numeric_ids: list[tuple[str, str]] = []
+        self._cells: dict[str, list[tuple[int, str, str]]] = defaultdict(list)  # sheet -> (row, column, segment)
         super().__init__(path)
 
     def wants_part(self, name: str) -> bool:
@@ -142,15 +147,21 @@ class XlsxDocument(OoxmlPackage):
         for cell in root.iter(_s("c")):
             ref = cell.get("r", "?")
             kind = cell.get("t")
+            position = _CELL_REF.match(ref)
             if kind == "inlineStr":
                 inline = cell.find(_s("is"))
                 if inline is not None:
                     self._add_string(f"{name}#{ref}", inline)
+                    if position:
+                        self._cells[name].append((int(position[2]), position[1], f"{name}#{ref}"))
             formula = cell.find(_s("f"))
             if formula is not None and (formula.text or "").strip():
                 self.add_text(f"{name}#{ref}:f", formula, transform=strip_brackets)
             value = cell.find(_s("v"))
             if value is not None:
+                if kind == "s" and position and (value.text or "").strip().isdigit():
+                    shared = f"xl/sharedStrings.xml#s{int(value.text)}"
+                    self._cells[name].append((int(position[2]), position[1], shared))
                 if kind == "str":
                     self.add_text(f"{name}#{ref}:v", value)
                 elif kind in (None, "n") and _BIG_INTEGER.match((value.text or "").strip()):
@@ -174,6 +185,31 @@ class XlsxDocument(OoxmlPackage):
             text = comment.find(_s("text"))
             if text is not None:
                 self._add_string(f"{part.name}#c{number}", text)
+
+    def assign_column_kinds(self) -> None:
+        """Below a header row such as "Nome | Email | P.IVA", every string cell of those columns is sensitive."""
+        by_id = {segment.id: segment for segment in self.segments}
+        for cells in self._cells.values():
+            rows: dict[int, dict[str, str]] = defaultdict(dict)
+            for row, column, segment_id in cells:
+                rows[row][column] = segment_id
+            header_row, kinds = 0, {}
+            for row in sorted(rows)[:_HEADER_SEARCH_ROWS]:
+                kinds = {
+                    column: kind
+                    for column, segment_id in rows[row].items()
+                    if segment_id in by_id and (kind := header_kind(by_id[segment_id].text))
+                }
+                if kinds:
+                    header_row = row
+                    break
+            for row in sorted(rows):
+                if row <= header_row:
+                    continue
+                for column, kind in kinds.items():
+                    segment = by_id.get(rows[row].get(column, ""))
+                    if segment is not None and segment.column_kind is None:
+                        segment.column_kind = kind
 
     # -- warnings / scrubbing -----------------------------------------------------------
 
