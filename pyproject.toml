@@ -13,7 +13,7 @@ authors = [{ name = "Gianmarco" }]
 dependencies = [
   "typer>=0.16,<1.0",
   "cryptography>=44.0",
-  "argon2-cffi>=23.1",
+  "argon2-cffi>=25.1.0",
   "lxml>=5.0",
 ]
 
