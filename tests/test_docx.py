@@ -12,9 +12,8 @@ from persona.documents import DocxDocument, open_document
 from persona.engine import analyze, apply, verify
 from persona.exceptions import InputError
 from persona.restore import placeholders_in, restore_segments
-from persona.vault import Argon2Params, Vault
-from tests.conftest import FAST_KDF
-from tests.docx_fixtures import SENSITIVE, all_xml_text, build_docx
+from persona.vault import Vault
+from tests.docx_fixtures import SENSITIVE, W_NS, all_xml_text, build_docx
 
 
 @pytest.fixture
@@ -109,7 +108,7 @@ def test_restore_finds_a_placeholder_the_ai_split_over_runs(vault: Vault, tmp_pa
     edits, report = restore_segments(document.segments, vault)
     out = tmp_path / "ai.restored.docx"
     document.write(out, edits)
-    assert [p.text for p in WordDocument(str(out)).paragraphs][0] == "Gentile Mario Rossi, grazie."
+    assert WordDocument(str(out)).paragraphs[0].text == "Gentile Mario Rossi, grazie."
     assert report.clean
 
 
@@ -128,14 +127,11 @@ def test_invalid_files_are_clean_errors(tmp_path: Path) -> None:
     empty_zip = tmp_path / "empty.docx"
     with zipfile.ZipFile(empty_zip, "w") as archive:
         archive.writestr("hello.txt", "x")
-    with pytest.raises(InputError, match="no word/document.xml"):
+    with pytest.raises(InputError, match=r"no word/document\.xml"):
         DocxDocument(empty_zip)
 
 
-def test_docx_through_the_cli(source: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PERSONA_HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("PERSONA_PASSWORD", "pw")
-    monkeypatch.setattr(Argon2Params.__init__, "__defaults__", (1, 8, 1, 32))
+def test_docx_through_the_cli(source: Path, tmp_path: Path, cli_env: Path) -> None:
     runner = CliRunner()
     assert runner.invoke(cli.app, ["init", "-p", "d"]).exit_code == 0
     done = runner.invoke(cli.app, ["anonymize", str(source), "-p", "d"])
@@ -164,3 +160,56 @@ def test_custom_xml_text_is_masked_too(tmp_path: Path, vault: Vault) -> None:
     out = anonymize(path, vault, tmp_path / "out.docx")
     assert "Mario" not in all_xml_text(out)
     assert b"<id>12</id>" in zipfile.ZipFile(out).read("customXml/item9.xml")
+
+
+def _replace_part(path: Path, name: str, data: bytes) -> None:
+    with zipfile.ZipFile(path) as archive:
+        entries = {n: archive.read(n) for n in archive.namelist()}
+    entries[name] = data
+    with zipfile.ZipFile(path, "w") as archive:
+        for entry, content in entries.items():
+            archive.writestr(entry, content)
+
+
+def test_external_entities_are_never_expanded(tmp_path: Path) -> None:
+    secret = tmp_path / "secret.txt"
+    secret.write_text("TOP-SECRET-CONTENT", encoding="utf-8")
+    path = build_docx(tmp_path / "xxe.docx")
+    _replace_part(
+        path,
+        "word/document.xml",
+        (
+            f'<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE w:document [<!ENTITY xxe SYSTEM "{secret.as_uri()}">]>'
+            f'<w:document xmlns:w="{W_NS}"><w:body><w:p><w:r><w:t>&xxe;</w:t></w:r></w:p></w:body></w:document>'
+        ).encode(),
+    )
+    with pytest.raises(InputError, match="DTD") as raised:
+        open_document(path)
+    assert "TOP-SECRET" not in str(raised.value)
+
+
+def test_entities_are_not_resolved_by_the_parser() -> None:
+    from persona.ooxml import parse_xml
+
+    with pytest.raises(InputError):
+        parse_xml(b'<!DOCTYPE a [<!ENTITY e "boom">]><a>&e;</a>', "x.xml")
+    assert parse_xml(b"<a>plain</a>", "x.xml").text == "plain"
+
+
+def test_table_columns_with_known_headers_are_masked_whole(tmp_path: Path, vault: Vault) -> None:
+    doc = WordDocument()
+    table = doc.add_table(rows=3, cols=4)
+    for cell, text in zip(table.rows[0].cells, ["Cognome", "Codice Fiscale", "Note", "E-mail"], strict=True):
+        cell.text = text
+    for cell, text in zip(table.rows[1].cells, ["Zanardelli", "XYZ-123", "da richiamare", "zeta(at)example"], strict=True):
+        cell.text = text
+    for cell, text in zip(table.rows[2].cells, ["Cosini", "", "ok", "n/d"], strict=True):
+        cell.text = text
+    source = tmp_path / "tabella.docx"
+    doc.save(str(source))
+    out = anonymize(source, vault, tmp_path / "out.docx")
+    rows = [[cell.text for cell in row.cells] for row in WordDocument(str(out)).tables[0].rows]
+    assert rows[0] == ["Cognome", "Codice Fiscale", "Note", "E-mail"]
+    assert rows[1][0].startswith("[PERSONA_") and rows[1][1].startswith("[CF_") and rows[1][3].startswith("[EMAIL_")
+    assert rows[1][2] == "da richiamare" and rows[2][2] == "ok" and rows[2][1] == ""
+    assert rows[2][0].startswith("[PERSONA_") and rows[2][3].startswith("[EMAIL_")

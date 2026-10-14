@@ -4,9 +4,9 @@
 
 Persona is a local command-line tool. It masks sensitive values in documents before they are shared with an external service (typically an AI), and restores them afterwards. In scope:
 
-- The encrypted vault (`persona/vault.py`): AES-256-GCM with an Argon2id derived key.
+- The encrypted vault (`persona/vault.py`): AES-256-GCM with an Argon2id derived key, the envelope header authenticated as associated data, bounded KDF parameters, rotating encrypted backups.
 - The anonymization pipeline, including the safety check that re-reads the written file.
-- DOCX and XLSX handling, including removal of author and revision metadata.
+- DOCX and XLSX handling, including removal of author and revision metadata and hardened XML parsing (no entity expansion, no DTDs, no network access).
 - The restore step.
 
 ## Threat model
@@ -25,7 +25,8 @@ What Persona does not protect against:
 - Text inside images, charts, SmartArt, pivot tables, drawings, external links, data connections and macros. Persona warns about these but does not process them.
 - Identifiers stored as numbers in spreadsheets.
 - Identification from context (for example "the only supplier of X in Y").
-- A compromised local machine, a weak vault password, or a password exposed through the `PERSONA_PASSWORD` environment variable.
+- A compromised local machine, a weak vault password, or a password exposed through the `PERSONA_PASSWORD` / `PERSONA_NEW_PASSWORD` environment variables.
+- Copies of the vault made outside Persona. Persona's own `.bak` files are encrypted like the vault and are deleted by `persona rekey`, but a copy you made yourself keeps opening with the old password.
 - The behaviour of the service that receives the anonymized file.
 
 ## Reporting a vulnerability

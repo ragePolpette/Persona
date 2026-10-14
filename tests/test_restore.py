@@ -28,7 +28,7 @@ def test_markdown_escaped_and_recased_placeholders(vault: Vault) -> None:
 
 
 def test_ai_that_rewrites_around_placeholders(vault: Vault) -> None:
-    censored = setup(vault)
+    setup(vault)
     ai_output = "Gentile **[PERSONA_1]**,\n\nla ringraziamo da parte di [AZIENDA_1]. Risponda a (EMAIL_1) o al TELEFONO_1."
     report = restore_text(ai_output, vault)
     assert "**Mario Rossi**" in report.text

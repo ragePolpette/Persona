@@ -29,27 +29,37 @@ class FoldedText:
         Whitespace inside the needle matches any run of whitespace. With `case_sensitive`
         the match is exact (accents included) and uses the original text directly.
         """
-        parts = needle.split()
-        if not parts:
+        return self.find(Needle(needle, case_sensitive=case_sensitive))
+
+    def find(self, needle: Needle) -> list[tuple[int, int]]:
+        """Like `find_all`, with a needle compiled once and reused across texts."""
+        if needle.pattern is None:
             return []
-        if case_sensitive:
-            pattern = re.compile(r"\s+".join(re.escape(part) for part in parts))
+        if needle.case_sensitive:
             return [
                 (m.start(), m.end())
-                for m in pattern.finditer(self.original)
+                for m in needle.pattern.finditer(self.original)
                 if _is_whole_word(self.original, m.start(), m.end())
             ]
-        folded_needle = FoldedText(" ".join(parts)).folded.split()
-        if not folded_needle:
-            return []
-        pattern = re.compile(r"\s+".join(re.escape(part) for part in folded_needle))
         hits: list[tuple[int, int]] = []
-        for match in pattern.finditer(self.folded):
+        for match in needle.pattern.finditer(self.folded):
             start = self._index[match.start()]
             end = self._index[match.end() - 1] + 1
             if _is_whole_word(self.original, start, end):
                 hits.append((start, end))
         return hits
+
+
+class Needle:
+    """A search string compiled once, for `FoldedText.find` on many texts."""
+
+    __slots__ = ("case_sensitive", "pattern", "text")
+
+    def __init__(self, text: str, *, case_sensitive: bool = False) -> None:
+        self.text = text
+        self.case_sensitive = case_sensitive
+        parts = text.split() if case_sensitive else FoldedText(" ".join(text.split())).folded.split()
+        self.pattern = re.compile(r"\s+".join(re.escape(part) for part in parts)) if parts else None
 
 
 def fold(text: str) -> str:
@@ -59,9 +69,7 @@ def fold(text: str) -> str:
 def _is_whole_word(text: str, start: int, end: int) -> bool:
     if text[start].isalnum() and start > 0 and _is_word_char(text[start - 1]):
         return False
-    if text[end - 1].isalnum() and end < len(text) and _is_word_char(text[end]):
-        return False
-    return True
+    return not (text[end - 1].isalnum() and end < len(text) and _is_word_char(text[end]))
 
 
 def _is_word_char(char: str) -> bool:

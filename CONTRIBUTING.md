@@ -22,9 +22,10 @@ pip install -e ".[dev]"
 ```bash
 pytest
 pytest tests/test_corpus.py -s    # per-kind detection report on the synthetic corpus
+ruff check .
 ```
 
-CI runs `pytest` on Python 3.11, 3.12 and 3.13. No linter is configured at the moment. Keep the style of the surrounding code and do not add code comments.
+CI runs `ruff check` and `pytest` on Python 3.11, 3.12 and 3.13, on Linux and Windows. The ruff rules are in `pyproject.toml`; no formatter is enforced. Keep the style of the surrounding code and do not add code comments.
 
 ## Security rules
 

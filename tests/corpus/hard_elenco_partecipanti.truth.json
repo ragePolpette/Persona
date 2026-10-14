@@ -1,0 +1,19 @@
+{
+  "sensitive": [
+    {"text": "Rossi Mario", "kind": "PERSONA"},
+    {"text": "BIANCHI Laura", "kind": "PERSONA"},
+    {"text": "Ferraro Giovanni", "kind": "PERSONA"},
+    {"text": "Colombo Anna", "kind": "PERSONA"},
+    {"text": "0044 20 7946 0958", "kind": "TELEFONO"},
+    {"text": "(212) 555-0147", "kind": "TELEFONO"}
+  ],
+  "glossary": [],
+  "keep": [
+    "ELENCO PARTECIPANTI",
+    "corso sicurezza",
+    "14/05/2026",
+    "ufficio tecnico",
+    "8 ore",
+    "Aula 3, secondo piano"
+  ]
+}

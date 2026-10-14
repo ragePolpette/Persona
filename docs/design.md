@@ -36,7 +36,9 @@ segments ─▶ detectors ─▶ propagate ─▶ resolve overlaps ─▶ (revie
 - Segments: every paragraph of the body, headers, footers, footnotes, endnotes, comments, glossary; text-box paragraphs are separate segments (not double-counted in the outer paragraph); tracked-deletion text and field-code text are separate streams per paragraph; external hyperlink targets; image alt text; custom XML leaf text; title/subject/keywords and `vt:` strings in document properties (heading lists in `app.xml` repeat document text).
 - Edits are `(start, end, text)` on a segment's text. Characters map back to `w:t` nodes; the replacement goes in the first covered node, the rest of the covered characters are blanked, tabs and line breaks stay. So formatting follows the run where the match starts, and a placeholder the AI split over runs is still found on restore.
 - Scrubbed on write, never restored: creator, last-modified-by, company, manager, hyperlink base; `w:author` / `w:initials` on revisions and comments; `people.xml`; `docProps/thumbnail.*` (a picture of page 1) and its relationship.
-- `anonymize` writes to a staging file, **re-opens it**, verifies the text actually on disk, and only then moves it into place.
+- `anonymize` writes to a staging file, **re-opens it**, verifies the text actually on disk, saves the vault, and only then moves it into place.
+- XML parts are parsed without entity resolution, DTD loading or network access, and a part that declares a DTD is refused (Office never writes one).
+- Tables: a first row (DOCX) or the first row with a recognised header (XLSX, within the first 20 rows) marks columns such as `Nome`, `Email`, `P.IVA`; the cells below are segments with a `column_kind`, masked whole at a priority just below the glossary.
 
 ### XLSX specifics
 
@@ -47,7 +49,13 @@ segments ─▶ detectors ─▶ propagate ─▶ resolve overlaps ─▶ (revie
 
 ## Vault
 
-Single JSON envelope: Argon2id (t=3, m=64 MiB, p=4) → AES-256-GCM, AAD `persona-vault-v1`, atomic write, mode 0600. Contents: entries (`kind`, `number`, `value`, `case_sensitive`) and the glossary. A wrong password and a tampered file are indistinguishable (GCM), and reported as such.
+Single JSON envelope: Argon2id (t=3, m=64 MiB, p=4) → AES-256-GCM, atomic write, mode 0600. Contents: entries (`kind`, `number`, `value`, `case_sensitive`), the glossary and the allowlist. A wrong password and a tampered file are indistinguishable (GCM), and reported as such.
+
+- Format version 2 authenticates the envelope header (version, KDF parameters, salt) as associated data, so the header cannot be edited or downgraded without detection. Version 1 files (constant AAD `persona-vault-v1`) are still read and are rewritten as version 2 on the next save.
+- KDF parameters read from a file are bounded before any work is done (time cost <= 10, memory <= 1 GiB, parallelism <= 8, 32-byte key): a crafted file cannot make opening it allocate gigabytes.
+- Every save first keeps the previous file as `<name>.bak` (then `.bak.1`, `.bak.2`): losing the vault means anonymized documents that can never be restored.
+- `persona rekey` re-encrypts with a new password and a fresh salt, then deletes the backups, because they are still encrypted with the old password.
+- `anonymize` saves the vault before moving the checked output into place, so an anonymized file never exists without its mapping on disk.
 
 Identity of an entry is the **exact surface string**. `ACME S.R.L.` and `Acme S.r.l.` are two placeholders. The cost is that the AI sees two entities; the gain is that restore is byte-exact.
 

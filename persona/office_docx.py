@@ -4,11 +4,12 @@ deletions, field codes, hyperlink targets, alt text, custom XML and document pro
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from lxml import etree
 
+from persona.detect.columns import header_kind
 from persona.ooxml import OoxmlPackage, Part, StreamLocator
 
 _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -40,6 +41,10 @@ class DocxDocument(OoxmlPackage):
         ("word/diagrams/", "diagram(s)/SmartArt"),
     )
 
+    def __init__(self, path: Path) -> None:
+        self._paragraph_ids: dict[etree._Element, str] = {}
+        super().__init__(path)
+
     def wants_part(self, name: str) -> bool:
         return bool(_PARAGRAPH_PARTS.match(name) or _CUSTOM_XML_PARTS.match(name))
 
@@ -52,6 +57,7 @@ class DocxDocument(OoxmlPackage):
 
     def _collect_paragraphs(self, part: Part) -> None:
         for number, paragraph in enumerate(part.root.iter(_w("p"))):
+            self._paragraph_ids[paragraph] = f"{part.name}#p{number}"
             streams: dict[str, list[tuple[etree._Element | None, int | str]]] = {"": [], "del": [], "field": []}
             for element in _own_elements(paragraph):
                 tag = element.tag
@@ -81,6 +87,35 @@ class DocxDocument(OoxmlPackage):
             if isinstance(element.tag, str) and not len(element) and (element.text or "").strip():
                 self.add_text(f"{part.name}#n{number}", element)
 
+    def assign_column_kinds(self) -> None:
+        """Below a first table row such as "Nome | Email | P.IVA", every paragraph in those columns is sensitive."""
+        by_id = {segment.id: segment for segment in self.segments}
+        for name, part in self._parts.items():
+            if not _PARAGRAPH_PARTS.match(name):
+                continue
+            for table in part.root.iter(_w("tbl")):
+                rows = table.findall(_w("tr"))
+                if len(rows) < 2:
+                    continue
+                kinds: dict[int, str] = {}
+                for column, cell in _grid_cells(rows[0]):
+                    text = " ".join(
+                        by_id[sid].text for p in cell.iter(_w("p")) if (sid := self._paragraph_ids.get(p)) in by_id
+                    )
+                    kind = header_kind(text)
+                    if kind:
+                        kinds[column] = kind
+                if not kinds:
+                    continue
+                for row in rows[1:]:
+                    for column, cell in _grid_cells(row):
+                        if column not in kinds:
+                            continue
+                        for paragraph in cell.iter(_w("p")):
+                            segment = by_id.get(self._paragraph_ids.get(paragraph, ""))
+                            if segment is not None and segment.column_kind is None:
+                                segment.column_kind = kinds[column]
+
     def scrub_part(self, part: Part) -> None:
         if _PARAGRAPH_PARTS.match(part.name):
             for element in part.root.iter():
@@ -93,6 +128,16 @@ class DocxDocument(OoxmlPackage):
         super()._scrub()
         if "word/people.xml" in self._names:
             self._replaced["word/people.xml"] = _EMPTY_PEOPLE
+
+
+def _grid_cells(row: etree._Element) -> Iterator[tuple[int, etree._Element]]:
+    """(grid column, cell) for the cells of a table row, counting merged cells (gridSpan)."""
+    column = 0
+    for cell in row.findall(_w("tc")):
+        yield column, cell
+        span = cell.find(f"{_w('tcPr')}/{_w('gridSpan')}")
+        value = span.get(_w("val"), "1") if span is not None else "1"
+        column += int(value) if value.isdigit() and int(value) > 0 else 1
 
 
 def _own_elements(paragraph: etree._Element) -> Iterator[etree._Element]:

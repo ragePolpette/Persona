@@ -13,7 +13,7 @@ from persona.documents import XlsxDocument, open_document
 from persona.engine import analyze, apply, verify
 from persona.exceptions import InputError
 from persona.restore import placeholders_in, restore_segments
-from persona.vault import Argon2Params, Vault
+from persona.vault import Vault
 from tests.xlsx_fixtures import SENSITIVE, all_xml_text, build_xlsx
 
 
@@ -128,7 +128,7 @@ def test_invalid_files_are_clean_errors(tmp_path: Path) -> None:
     empty = tmp_path / "empty.xlsx"
     with zipfile.ZipFile(empty, "w") as archive:
         archive.writestr("hello.txt", "x")
-    with pytest.raises(InputError, match="no xl/workbook.xml"):
+    with pytest.raises(InputError, match=r"no xl/workbook\.xml"):
         XlsxDocument(empty)
 
 
@@ -158,10 +158,7 @@ def test_ai_generated_workbooks_with_inline_strings_and_mangled_placeholders(vau
     assert report.clean
 
 
-def test_xlsx_through_the_cli(source: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PERSONA_HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("PERSONA_PASSWORD", "pw")
-    monkeypatch.setattr(Argon2Params.__init__, "__defaults__", (1, 8, 1, 32))
+def test_xlsx_through_the_cli(source: Path, tmp_path: Path, cli_env: Path) -> None:
     runner = CliRunner()
     assert runner.invoke(cli.app, ["init", "-p", "x"]).exit_code == 0
     done = runner.invoke(cli.app, ["anonymize", str(source), "-p", "x"])
@@ -180,3 +177,24 @@ def test_rich_text_keeps_the_formatting_of_its_first_run(source: Path, vault: Va
     shared = zipfile.ZipFile(out).read("xl/sharedStrings.xml").decode("utf-8")
     first = re.search(r"<si>(.*?)</si>", shared, re.S).group(1)
     assert "<b/>" in first and "[PERSONA_" in first and "Rossi" not in first
+
+
+def test_columns_with_known_headers_are_masked_whole(tmp_path: Path, vault: Vault) -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.append(["Elenco iscritti"])
+    sheet.append(["Nome", "Cognome", "P.IVA", "Indirizzo", "Importo", "Note"])
+    sheet.append(["Zeno", "Cosini", "IT-0412-x", "Strada Bassa 4", 120, "pagato"])
+    sheet.append(["Ada", "Zanardelli", "", "Contrada Alta", 90, "da sollecitare"])
+    source = tmp_path / "iscritti.xlsx"
+    wb.save(str(source))
+    out = anonymize(source, vault, tmp_path / "out.xlsx")
+    rows = [[cell.value for cell in row] for row in load_workbook(str(out)).active.iter_rows()]
+    assert rows[0][0] == "Elenco iscritti"
+    assert rows[1] == ["Nome", "Cognome", "P.IVA", "Indirizzo", "Importo", "Note"]
+    for row in rows[2:]:
+        assert row[0].startswith("[PERSONA_") and row[1].startswith("[PERSONA_") and row[3].startswith("[INDIRIZZO_")
+    assert rows[2][2].startswith("[PIVA_") and rows[3][2] is None
+    assert rows[2][4] == 120 and rows[2][5] == "pagato" and rows[3][5] == "da sollecitare"

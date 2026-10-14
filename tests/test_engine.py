@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from types import SimpleNamespace
+
 from persona.engine import Segment, analyze, anonymize_text, apply, verify
 from persona.restore import restore_text
 from persona.vault import Vault
@@ -103,3 +106,47 @@ def test_generic_mailbox_names_are_not_treated_as_people(vault: Vault) -> None:
 def test_adjacent_name_parts_become_one_person(vault: Vault) -> None:
     censored, _ = anonymize_text("Zeno Cosini\nzeno.cosini@example.test", vault)
     assert censored.splitlines()[0] == "[PERSONA_1]"
+
+
+def test_ordinary_web_addresses_do_not_create_name_aliases(vault: Vault) -> None:
+    text = "Catalogo su https://www.acme.com/prodotti e www.acme.com/prodotti/offerte.\nI Prodotti e le Offerte di Acme."
+    censored, _ = anonymize_text(text, vault)
+    assert "I Prodotti e le Offerte di Acme." in censored
+
+
+def test_profile_urls_still_reveal_names(vault: Vault) -> None:
+    censored, _ = anonymize_text("https://it.linkedin.com/in/zeno-cosini/details?utm_source=Share\nZeno ha scritto. Share", vault)
+    assert "Zeno ha" not in censored and censored.endswith("Share")
+
+
+def test_a_cell_under_a_known_column_header_is_masked_whole(vault: Vault) -> None:
+    segments = [
+        Segment("h", "Cognome"),
+        Segment("c1", "Verdi", column_kind="PERSONA"),
+        Segment("c2", "Officine Digitali Veronesi", column_kind="AZIENDA"),
+        Segment("c3", " - ", column_kind="PERSONA"),
+        Segment("t", "I campi verdi sono di Verdi e di Officine Digitali Veronesi - fine"),
+    ]
+    result = apply(analyze(segments, vault), vault)
+    assert result.texts["c1"] == "[PERSONA_1]" and result.texts["c2"] == "[AZIENDA_1]"
+    assert result.texts["c3"] == " - "
+    assert result.texts["t"] == "I campi verdi sono di [PERSONA_1] e di [AZIENDA_1] - fine"
+
+
+def test_verify_compiles_each_search_once_not_once_per_segment(vault: Vault, monkeypatch) -> None:
+    from persona import textnorm
+
+    anonymize_text("Dott. Mario Rossi, Acme S.r.l., Dott.ssa Anna Verdi", vault)
+    vault.add_glossary("Zeno Cosini", "PERSONA", ["Zeno"])
+    calls = []
+
+    def counting_compile(*args, **kwargs):
+        calls.append(args[0])
+        return re.compile(*args, **kwargs)
+
+    monkeypatch.setattr(textnorm, "re", SimpleNamespace(compile=counting_compile, escape=re.escape))
+    verify({"only": "testo"}, vault)
+    one = len(calls)
+    calls.clear()
+    verify({str(n): "testo" for n in range(50)}, vault)
+    assert len(calls) == one

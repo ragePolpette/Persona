@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import heapq
+from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Protocol, Sequence
+from itertools import count
+from typing import Protocol
+
+from persona.detect.vocabulary import EDGE_WORDS
 
 # Higher wins when two detections overlap.
 PRIORITY_VALIDATED = 100  # checksum-validated: IBAN, codice fiscale, P.IVA, e-mail
 PRIORITY_GLOSSARY = 90
+PRIORITY_COLUMN = 85  # a cell under a column header such as "Nome" or "Email"
 PRIORITY_KNOWN_VALUE = 80  # a value already seen in this document or in the project vault
 PRIORITY_PATTERN = 60  # phone numbers
 PRIORITY_HEURISTIC = 50  # titles + names, company suffixes, street addresses
@@ -34,10 +41,6 @@ class Detector(Protocol):
     def detect(self, text: str) -> list[Span]: ...
 
 
-_EDGE_WORDS = {
-    "di", "del", "della", "dei", "degli", "e", "ed", "&", "and", "de", "da", "il", "la", "lo",
-    "con", "per", "tra", "fra", "a", "al", "alla",
-}  # fmt: skip
 _EDGE_PUNCTUATION = " \t\r\n,;:-–"
 
 
@@ -48,16 +51,23 @@ def resolve_overlaps(spans: Sequence[Span]) -> list[Span]:
     does not cover is kept as a smaller span, so a greedy heuristic match can never hide
     a sensitive value behind a neighbour ("Giulia Marchetti di Tessitura Valdarno S.r.l.").
     """
-    pending = list(spans)
-    kept: list[Span] = []
+    order = count()
+    pending = [(-span.priority, -span.length, span.start, next(order), span) for span in spans]
+    heapq.heapify(pending)
+    kept: list[Span] = []  # non-overlapping, sorted by start (and therefore by end)
+    kept_ends: list[int] = []
     while pending:
-        pending.sort(key=lambda s: (-s.priority, -s.length, s.start))
-        span = pending.pop(0)
-        blockers = [other for other in kept if span.start < other.end and other.start < span.end]
-        if not blockers:
-            kept.append(span)
+        span = heapq.heappop(pending)[-1]
+        first = bisect_right(kept_ends, span.start)
+        last = first
+        while last < len(kept) and kept[last].start < span.end:
+            last += 1
+        if first == last:
+            kept.insert(first, span)
+            kept_ends.insert(first, span.end)
             continue
-        pending.extend(_uncovered_parts(span, blockers))
+        for part in _uncovered_parts(span, kept[first:last]):
+            heapq.heappush(pending, (-part.priority, -part.length, part.start, next(order), part))
     return sorted(kept, key=lambda s: (s.start, s.end))
 
 
@@ -78,11 +88,11 @@ def _trimmed(span: Span, start: int, end: int) -> Span | None:
     while True:
         stripped = text.strip(_EDGE_PUNCTUATION)
         words = stripped.split(None, 1)
-        if len(words) == 2 and words[0].lower() in _EDGE_WORDS:
+        if len(words) == 2 and words[0].lower() in EDGE_WORDS:
             stripped = words[1]
         else:
             last = stripped.rsplit(None, 1)
-            if len(last) == 2 and last[1].lower() in _EDGE_WORDS:
+            if len(last) == 2 and last[1].lower() in EDGE_WORDS:
                 stripped = last[0]
         if stripped == text:
             break
