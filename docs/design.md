@@ -54,7 +54,7 @@ Identity of an entry is the **exact surface string**. `ACME S.R.L.` and `Acme S.
 ## Known gaps (tracked by tests or the roadmap)
 
 - Names outside the first-name list, or a lone first name, are not detected by rules (`test_names_not_in_the_first_name_list_or_alone_are_a_known_gap`).
-- Companies/institutions without a legal suffix or known keyword (`Officine Digitali Veronesi`, `Studioboost`) need the glossary.
+- Companies/institutions without a legal suffix or known keyword (`Officine Digitali Veronesi`, `Northwind Labs`) need the glossary.
 - The first-name list is a hand-written gazetteer (~350 Italian + ~300 international names): it will miss rarer names, and it causes some over-masking (`Aurora Borealis`).
 - Cities are not masked (unless part of an address with a postcode), even though a city plus an employer can identify someone.
 - Unlabeled birth dates, plates and ID numbers are not detected (a lone `AB123CD` or `12/03/1980` is too ambiguous); the label is the signal.
