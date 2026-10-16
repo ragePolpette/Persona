@@ -1,0 +1,7 @@
+# Fake credentials in test fixtures, reviewed and approved on 2026-10-16.
+683daf7988040bf440526f615b9f8d198803bc82:tests/test_security_core.py:generic-api-key:84
+683daf7988040bf440526f615b9f8d198803bc82:tests/test_failure_paths.py:generic-api-key:55
+683daf7988040bf440526f615b9f8d198803bc82:tests/test_failure_paths.py:generic-api-key:239
+cc141f1f683820439be9142d939df414f224c7c8:tests/test_security_core.py:generic-api-key:61
+cc141f1f683820439be9142d939df414f224c7c8:tests/test_security_core.py:generic-api-key:84
+cc141f1f683820439be9142d939df414f224c7c8:tests/test_security_core.py:generic-api-key:90
