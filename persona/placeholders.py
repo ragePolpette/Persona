@@ -35,7 +35,7 @@ _PATTERN = re.compile(
     rf"(?:(?P<open>\\?[\[({{<【])|(?<![A-Za-z0-9]))"
     rf"(?P<kind>{_KIND_ALTERNATION})"
     rf"(?:\\?_|[ \t\-]+)"
-    rf"(?P<number>\d{{1,5}})"
+    rf"(?P<number>\d+)"
     rf"(?P<close>\\?[\])}}>】])?",
     re.IGNORECASE,
 )

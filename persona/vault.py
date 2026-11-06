@@ -107,7 +107,7 @@ class Vault:
             raise VaultError(f"Unreadable vault file: {path}") from exc
         try:
             version = envelope["version"]
-            if version not in SUPPORTED_VERSIONS or isinstance(version, bool):
+            if not isinstance(version, int) or isinstance(version, bool) or version not in SUPPORTED_VERSIONS:
                 raise VaultError(f"Unsupported vault version: {version!r}")
             params = Argon2Params(**envelope["kdf"]["params"])
             salt = _b64d(envelope["kdf"]["salt"])

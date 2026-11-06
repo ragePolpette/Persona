@@ -208,3 +208,12 @@ def test_text_file_to_stdout_and_its_limits(tmp_path: Path) -> None:
     assert run("anonymize", str(tmp_path), "-p", "s", "--stdout").exit_code == 1
     assert run("anonymize", "--stdin", "-p", "s", "--review").exit_code == 1
     assert run("anonymize", "-p", "s").exit_code == 1  # neither a path nor --stdin
+
+
+def test_stdin_in_a_pipe_needs_the_password_in_the_environment(monkeypatch) -> None:
+    run("init", "-p", "pipe")
+    monkeypatch.delenv("PERSONA_PASSWORD")
+    monkeypatch.setattr(cli, "_terminal_available", lambda: False)
+    result = run_with_input("Il Dott. Mario Rossi\n", "anonymize", "--stdin", "-p", "pipe")
+    assert result.exit_code == 1
+    assert "PERSONA_PASSWORD" in result.output

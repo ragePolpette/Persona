@@ -32,7 +32,8 @@ class Document(Protocol):
     def write(self, out: Path, edits: Mapping[str, Sequence[Edit]]) -> None: ...
 
 
-def open_document(path: Path) -> Document:
+def open_document(path: Path | str) -> Document:
+    path = Path(path)
     suffix = path.suffix.lower()
     if suffix in TEXT_SUFFIXES:
         text, bom = _read_text_file(path)
@@ -70,8 +71,24 @@ class TextDocument:
             handle.write(self.render(edits))
 
 
+_UTF_BOMS = (
+    (b"\xff\xfe\x00\x00", "utf-32-le"),
+    (b"\x00\x00\xfe\xff", "utf-32-be"),
+    (b"\xff\xfe", "utf-16-le"),
+    (b"\xfe\xff", "utf-16-be"),
+)
+
+
 def decode_text(data: bytes) -> tuple[str, bool]:
-    """(text, had a UTF-8 BOM). UTF-8 first, then Windows-1252, the usual encoding of legacy Italian files."""
+    """(text, had a UTF-8 BOM). UTF-16/32 are honoured by their BOM (Notepad "Unicode" files are UTF-16);
+    then UTF-8, then Windows-1252, the usual encoding of legacy Italian files.
+    """
+    for mark, encoding in _UTF_BOMS:
+        if data.startswith(mark):
+            try:
+                return data[len(mark) :].decode(encoding), False
+            except UnicodeDecodeError as exc:
+                raise InputError(f"Corrupt {encoding.upper()} file (the BOM is there, the content is broken): {exc}") from exc
     bom = data.startswith(b"\xef\xbb\xbf")
     try:
         return data.decode("utf-8-sig"), bom
@@ -80,7 +97,7 @@ def decode_text(data: bytes) -> tuple[str, bool]:
     try:
         return data.decode("cp1252"), False
     except UnicodeDecodeError as exc:
-        raise InputError(f"Unknown text encoding (not UTF-8 or Windows-1252): {exc}") from exc
+        raise InputError(f"Unknown text encoding (not UTF-8, UTF-16/32 or Windows-1252): {exc}") from exc
 
 
 def _read_text_file(path: Path) -> tuple[str, bool]:

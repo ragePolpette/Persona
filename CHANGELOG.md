@@ -29,7 +29,22 @@
 - Faster overlap resolution and verification: spans are sorted once and search patterns are compiled once per run instead of once per segment.
 - Detection word lists (name particles, stop words) live in one module, `persona/detect/vocabulary.py`.
 
+### Fixed
+
+- UTF-16/32 text files (Notepad "Unicode" saves) are recognised by their BOM instead of being silently misread as Windows-1252; a file whose BOM does not match its content is a clean error.
+- `anonymize --stdin` in a pipe with no terminal and no `PERSONA_PASSWORD` fails with a clear message instead of hanging on a password prompt that can never be answered.
+- Placeholders with numbers above 99999 are found again on restore.
+- DOCX: a tab or line break inside a masked name no longer survives as a stray character next to the placeholder.
+- XLSX: cached string results of formulas take part in column-header detection.
+- A vault file with a non-integer version is rejected as malformed instead of reporting a wrong password.
+- `open_document` accepts plain string paths.
+
+### Security
+
+- Office packages: parsed XML parts larger than 256 MiB decompressed are refused (zip-bomb guard), and media or macro binaries are no longer read into memory just to be counted for warnings.
+
 ### Development
 
 - `ruff` is part of the `dev` extras and runs in CI; the test matrix now includes Windows.
 - A single `fast_kdf` fixture replaces the per-file patching of Argon2 defaults in tests.
+- The license metadata is a SPDX string (setuptools >= 77 required to build); the ruff pin is widened to `>=0.16,<0.18` so a release older than 45 days is always available.

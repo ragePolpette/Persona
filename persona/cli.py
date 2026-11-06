@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import json
 import os
+import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -210,6 +211,8 @@ def anonymize(
     """Mask sensitive data. The written file is re-read and checked before it is declared shareable."""
     if stdin == (path is not None):
         raise InputError("Give either a FILE/DIRECTORY or --stdin.")
+    if stdin and not os.environ.get("PERSONA_PASSWORD") and not _terminal_available():
+        raise InputError("With --stdin there is no terminal to ask the vault password: set PERSONA_PASSWORD.")
     is_dir = path is not None and path.is_dir()
     if review and (stdin or json_report):
         raise InputError("--review is interactive: it cannot be combined with --stdin or --json.")
@@ -283,6 +286,17 @@ def anonymize(
     codes = {_STATUS_EXIT.get(report.status, 0) for report in reports}
     if 2 in codes or 1 in codes:
         raise typer.Exit(code=2 if 2 in codes else 1)
+
+
+def _terminal_available() -> bool:
+    """True if an interactive password prompt can reach a terminal even while stdin is a pipe."""
+    if sys.stdin.isatty() or os.name == "nt":
+        return True
+    try:
+        os.close(os.open("/dev/tty", os.O_RDONLY))
+    except OSError:
+        return False
+    return True
 
 
 def _say(to_stdout: bool):
