@@ -59,6 +59,7 @@ class DocxDocument(OoxmlPackage):
         for number, paragraph in enumerate(part.root.iter(_w("p"))):
             self._paragraph_ids[paragraph] = f"{part.name}#p{number}"
             streams: dict[str, list[tuple[etree._Element | None, int | str]]] = {"": [], "del": [], "field": []}
+            virtuals: dict[int, etree._Element] = {}
             for element in _own_elements(paragraph):
                 tag = element.tag
                 if tag == _w("t"):
@@ -68,13 +69,18 @@ class DocxDocument(OoxmlPackage):
                 elif tag == _w("instrText"):
                     streams["field"].extend((element, i) for i in range(len(element.text or "")))
                 elif tag == _w("tab"):
+                    virtuals[len(streams[""])] = element
                     streams[""].append((None, "\t"))
                 elif tag in (_w("br"), _w("cr")):
+                    virtuals[len(streams[""])] = element
                     streams[""].append((None, "\n"))
             for kind, chars in streams.items():
                 if any(node is not None for node, _ in chars):
                     suffix = f":{kind}" if kind else ""
-                    self.add(f"{part.name}#p{number}{suffix}", StreamLocator(chars))
+                    self.add(
+                        f"{part.name}#p{number}{suffix}",
+                        StreamLocator(chars, virtuals=virtuals if not kind else None),
+                    )
 
     def _collect_alt_text(self, part: Part) -> None:
         for number, element in enumerate(part.root.iter(f"{{{_WP}}}docPr")):

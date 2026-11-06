@@ -25,6 +25,9 @@ APP = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties
 PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 
+# A crafted zip can expand gigabytes from kilobytes: no real Office XML part is anywhere near this.
+MAX_PART_BYTES = 256 * 1024 * 1024
+
 RELS_PARTS = re.compile(r"^(?:.+/)?_rels/[^/]*\.rels$")
 DOC_PROPS = {"docProps/core.xml", "docProps/app.xml", "docProps/custom.xml"}
 
@@ -65,7 +68,8 @@ class Locator:
 class StreamLocator(Locator):
     """Characters spread over several text nodes (runs). Each maps back to (node, index).
 
-    Virtual characters (tabs, line breaks) have no node: they keep words apart, never edited.
+    Virtual characters (tabs, line breaks) have no text node: they keep words apart. When an edit
+    covers one completely, its element is removed, so no stray tab survives where a name was.
     """
 
     def __init__(
@@ -73,9 +77,11 @@ class StreamLocator(Locator):
         chars: list[tuple[etree._Element | None, int | str]],
         *,
         transform: Callable[[str], str] | None = None,
+        virtuals: Mapping[int, etree._Element] | None = None,
     ) -> None:
         self._chars = chars
         self._transform = transform
+        self._virtuals = virtuals or {}
         self.text = "".join(
             (node.text or "")[i] if node is not None else i  # type: ignore[index]
             for node, i in chars
@@ -87,7 +93,15 @@ class StreamLocator(Locator):
             if node is not None and node not in pieces:
                 pieces[node] = list(node.text or "")
         touched: set[etree._Element] = set()
+        dropped: set[int] = set()
         for edit in edits:
+            for position in range(edit.start, min(edit.end, len(self._chars))):
+                element = self._virtuals.get(position)
+                if element is not None and position not in dropped:
+                    parent = element.getparent()
+                    if parent is not None:
+                        parent.remove(element)
+                    dropped.add(position)
             covered = [(n, i) for n, i in self._chars[edit.start : edit.end] if n is not None]
             if not covered:
                 continue
@@ -183,13 +197,17 @@ class OoxmlPackage:
                     )
                 for name in self._names:
                     if RELS_PARTS.match(name) or name in DOC_PROPS or self.wants_part(name):
+                        if archive.getinfo(name).file_size > MAX_PART_BYTES:
+                            raise InputError(
+                                f"{self.path.name}:{name} expands to over {MAX_PART_BYTES // (1024 * 1024)} MiB: "
+                                "no real Office XML part is that big (zip bomb?)."
+                            )
                         self._parts[name] = Part(name, parse_xml(archive.read(name), f"{self.path.name}:{name}"))
+                # only the parts a subclass needs for warnings; media and .bin stay on disk
                 self._raw = {
                     name: archive.read(name)
                     for name in self._names
-                    if any(name.startswith(prefix) for prefix, _ in self.not_inspected)
-                    or any(name.startswith(prefix) for prefix in self.scan_raw)
-                    or name.endswith(".bin")
+                    if any(name.startswith(prefix) for prefix in self.scan_raw)
                 }
         except zipfile.BadZipFile as exc:
             raise InputError(f"{self.path.name} is not a valid {self.kind} file.") from exc
@@ -249,7 +267,7 @@ class OoxmlPackage:
                 self.add_text(
                     f"{part.name}#prop{number}",
                     element,
-                    transform=transform if element.tag == f"{{{VT}}}lpstr" else None,
+                    transform=transform if element.tag in (f"{{{VT}}}lpstr", f"{{{VT}}}lpwstr") else None,
                 )
 
     def _collect_warnings(self) -> None:

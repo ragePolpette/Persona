@@ -48,3 +48,8 @@ def test_multiple_and_adjacent() -> None:
 def test_letter_glued_to_bracket_still_matches() -> None:
     assert canon("Sig.[PERSONA_1]x") == ["[PERSONA_1]"]
     assert canon("dell'[AZIENDA_1]") == ["[AZIENDA_1]"]
+
+
+def test_numbers_beyond_five_digits() -> None:
+    assert canon("[PERSONA_123456]") == ["[PERSONA_123456]"]
+    assert canon("PERSONA_123456") == ["[PERSONA_123456]"]

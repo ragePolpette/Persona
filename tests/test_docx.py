@@ -213,3 +213,21 @@ def test_table_columns_with_known_headers_are_masked_whole(tmp_path: Path, vault
     assert rows[1][0].startswith("[PERSONA_") and rows[1][1].startswith("[CF_") and rows[1][3].startswith("[EMAIL_")
     assert rows[1][2] == "da richiamare" and rows[2][2] == "ok" and rows[2][1] == ""
     assert rows[2][0].startswith("[PERSONA_") and rows[2][3].startswith("[EMAIL_")
+
+
+def test_a_tab_inside_a_masked_name_does_not_survive(vault: Vault, tmp_path: Path) -> None:
+    doc = WordDocument()
+    paragraph = doc.add_paragraph()
+    paragraph.add_run("Il Dott. Mario")
+    paragraph.add_run("\t")  # python-docx writes a <w:tab/> element
+    paragraph.add_run("Rossi firma.")
+    source = tmp_path / "tab.docx"
+    doc.save(str(source))
+    out = anonymize(source, vault, tmp_path / "out.docx")
+    assert WordDocument(str(out)).paragraphs[0].text == "Il Dott. [PERSONA_1] firma."
+
+
+def test_an_impossibly_large_part_is_refused(source: Path, monkeypatch) -> None:
+    monkeypatch.setattr("persona.ooxml.MAX_PART_BYTES", 10)
+    with pytest.raises(InputError, match="zip bomb"):
+        open_document(source)

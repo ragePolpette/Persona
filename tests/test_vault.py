@@ -185,3 +185,12 @@ def test_rekey_changes_the_password_keeps_the_data_and_drops_old_backups(vault: 
     with pytest.raises(WrongPasswordError):
         Vault.open(vault.path, "pw")
     assert Vault.open(vault.path, "new-pw").lookup("PERSONA", 1).value == "Mario Rossi"
+
+
+def test_a_non_integer_version_is_a_clean_error(vault: Vault) -> None:
+    _write_envelope(vault.path, version=2.0)
+    with pytest.raises(VaultError, match="Unsupported vault version"):
+        Vault.open(vault.path, "pw")
+    _write_envelope(vault.path, version=True)
+    with pytest.raises(VaultError, match="Unsupported vault version"):
+        Vault.open(vault.path, "pw")

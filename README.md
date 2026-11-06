@@ -92,7 +92,7 @@ In a directory, hidden files and earlier outputs (`*.anon.*`, `*.restored.*`) ar
 
 Run `persona --help` and `persona <command> --help` for all options (`--out`, `--exclude`, `--force`, `--review`, `--dry-run`, `--recursive`, `--json`, `--stdin`, `--stdout`).
 
-Text files are read as UTF-8 (a BOM is accepted and written back) or, failing that, as Windows-1252. Line endings are preserved as they are. Output is always UTF-8.
+Text files are read as UTF-16/32 when their BOM says so, otherwise as UTF-8 (a BOM is accepted and written back) or, failing that, as Windows-1252. Line endings are preserved as they are. Output is always UTF-8. When `--stdin` reads from a pipe and no terminal is available (CI, cron), the vault password must come from `PERSONA_PASSWORD`: there is nowhere to ask for it.
 
 ## Python API
 

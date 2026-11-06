@@ -91,3 +91,33 @@ def test_undecodable_text_is_a_clean_error(tmp_path: Path) -> None:
     source.write_bytes(b"\x81\x8d\x8f\x90\x9d")
     with pytest.raises(InputError, match="encoding"):
         open_document(source)
+
+
+def test_utf16_files_with_bom_are_read(tmp_path: Path, cli_env: Path) -> None:
+    source = tmp_path / "notepad.txt"
+    source.write_bytes("Il Dott. Mario Rossi è qui.".encode("utf-16"))  # utf-16 writes the BOM
+    assert open_document(source).segments[0].text == "Il Dott. Mario Rossi è qui."
+    _anonymize_cli(source)
+    assert (tmp_path / "notepad.anon.txt").read_text(encoding="utf-8") == "Il Dott. [PERSONA_1] è qui."
+
+
+def test_utf32_and_big_endian_boms_are_read(tmp_path: Path) -> None:
+    big = tmp_path / "be.txt"
+    big.write_bytes(b"\xfe\xff" + "ciao".encode("utf-16-be"))
+    assert open_document(big).segments[0].text == "ciao"
+    wide = tmp_path / "u32.txt"
+    wide.write_bytes(b"\xff\xfe\x00\x00" + "ciao".encode("utf-32-le"))
+    assert open_document(wide).segments[0].text == "ciao"
+
+
+def test_corrupt_utf16_is_a_clean_error(tmp_path: Path) -> None:
+    source = tmp_path / "bad.txt"
+    source.write_bytes(b"\xff\xfe\x41")
+    with pytest.raises(InputError, match="UTF-16"):
+        open_document(source)
+
+
+def test_open_document_accepts_a_plain_string_path(tmp_path: Path) -> None:
+    source = tmp_path / "x.txt"
+    source.write_text("ciao", encoding="utf-8")
+    assert open_document(str(source)).segments[0].text == "ciao"

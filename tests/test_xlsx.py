@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from typer.testing import CliRunner
 
 from persona import cli
@@ -198,3 +198,27 @@ def test_columns_with_known_headers_are_masked_whole(tmp_path: Path, vault: Vaul
         assert row[0].startswith("[PERSONA_") and row[1].startswith("[PERSONA_") and row[3].startswith("[INDIRIZZO_")
     assert rows[2][2].startswith("[PIVA_") and rows[3][2] is None
     assert rows[2][4] == 120 and rows[2][5] == "pagato" and rows[3][5] == "da sollecitare"
+
+
+def test_cached_formula_strings_join_column_detection(tmp_path: Path, vault: Vault) -> None:
+    path = tmp_path / "calc.xlsx"
+    workbook = Workbook()
+    workbook.active["A1"] = "Nome"
+    workbook.save(str(path))
+    with zipfile.ZipFile(path) as source_zip:
+        order = source_zip.namelist()
+        entries = {name: source_zip.read(name) for name in order}
+    sheet_xml = entries["xl/worksheets/sheet1.xml"].decode("utf-8").replace(
+        "</sheetData>",
+        '<row r="2"><c r="A2" t="str"><f>UPPER("x")</f><v>Rosario Verdi</v></c></row></sheetData>',
+        1,
+    )
+    entries["xl/worksheets/sheet1.xml"] = sheet_xml.encode("utf-8")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as target:
+        for name in order:
+            target.writestr(name, entries[name])
+    document = open_document(path)
+    segment = next(s for s in document.segments if s.id.endswith("#A2:v"))
+    assert segment.column_kind == "PERSONA"
+    out = anonymize(path, vault, tmp_path / "out.xlsx")
+    assert "Rosario" not in all_xml_text(out)

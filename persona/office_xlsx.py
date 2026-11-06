@@ -164,6 +164,8 @@ class XlsxDocument(OoxmlPackage):
                     self._cells[name].append((int(position[2]), position[1], shared))
                 if kind == "str":
                     self.add_text(f"{name}#{ref}:v", value)
+                    if position:
+                        self._cells[name].append((int(position[2]), position[1], f"{name}#{ref}:v"))
                 elif kind in (None, "n") and _BIG_INTEGER.match((value.text or "").strip()):
                     self._numeric_ids.append((name, ref))
         for number, link in enumerate(root.iter(_s("hyperlink"))):
